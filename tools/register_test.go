@@ -3,9 +3,11 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -236,5 +238,57 @@ func TestReadOnlyAndDestructiveHints(t *testing.T) {
 	del := tools["flickr_photos_delete"].Annotations
 	if del.ReadOnlyHint || del.DestructiveHint == nil || !*del.DestructiveHint {
 		t.Fatal("delete is destructive")
+	}
+}
+
+func TestPagedMethodsGetASmallDefaultPerPage(t *testing.T) {
+	caller := &fakeCaller{reply: json.RawMessage(`{"stat":"ok"}`)}
+	cs, _ := session(t, caller, Options{MaxPerms: flickr.PermsRead, Authorized: true})
+	ctx := context.Background()
+	if _, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "flickr_photos_search", Arguments: map[string]any{"text": "x"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := caller.last(t).Params.Get("per_page"); got != DefaultPerPage {
+		t.Fatalf("per_page = %q, want %s", got, DefaultPerPage)
+	}
+	if _, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "flickr_photos_search", Arguments: map[string]any{"text": "x", "per_page": 500}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := caller.last(t).Params.Get("per_page"); got != "500" {
+		t.Fatalf("an explicit per_page must win, got %q", got)
+	}
+	if _, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "flickr_photos_getInfo", Arguments: map[string]any{"photo_id": "1"}}); err != nil {
+		t.Fatal(err)
+	}
+	if caller.last(t).Params.Has("per_page") {
+		t.Fatal("methods without per_page must not get one")
+	}
+	tools := listNames(t, cs)
+	if !strings.Contains(tools["flickr_photos_search"].Description, "per_page defaults to 50") {
+		t.Fatal("paged tools must explain paging")
+	}
+}
+
+func TestLongResponsesAreCut(t *testing.T) {
+	big := `{"stat":"ok","x":"` + strings.Repeat("あ", 400) + `"}`
+	caller := &fakeCaller{reply: json.RawMessage(big)}
+	cs, _ := session(t, caller, Options{MaxPerms: flickr.PermsRead, Authorized: true, MaxResponseBytes: 100})
+	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "flickr_photos_getExif", Arguments: map[string]any{"photo_id": "1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := res.Content[0].(*mcp.TextContent).Text
+	head, note, ok := strings.Cut(text, "\n\n[truncated: ")
+	if !ok || len(head) > 100 || !utf8.ValidString(head) {
+		t.Fatalf("not cut on a character boundary within the limit: %q", text)
+	}
+	if !strings.Contains(note, "of "+strconv.Itoa(len(big))+" bytes") {
+		t.Fatalf("note = %q", note)
+	}
+}
+
+func TestShortResponsesAreUntouched(t *testing.T) {
+	if got := truncate(`{"stat":"ok"}`, 100); got != `{"stat":"ok"}` {
+		t.Fatalf("got %q", got)
 	}
 }

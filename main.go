@@ -57,6 +57,7 @@ func main() {
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	maxPermsFlag := flag.String("max-perms", "read", "highest permission a tool may need: read, write or delete")
 	namespacesFlag := flag.String("namespaces", "", "comma-separated namespaces to expose (e.g. photos,photosets); empty means all")
+	maxResponseFlag := flag.Int("max-response-bytes", tools.DefaultMaxResponseBytes, "longest response text returned to the client; longer ones are cut")
 	flag.Parse()
 
 	if *showVersion {
@@ -68,7 +69,7 @@ func main() {
 	if err != nil || maxPerms == flickr.PermsNone {
 		log.Fatalf("--max-perms must be read, write or delete")
 	}
-	srv, err := buildServer(maxPerms, splitList(*namespacesFlag))
+	srv, err := buildServer(maxPerms, splitList(*namespacesFlag), *maxResponseFlag)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -81,7 +82,7 @@ func main() {
 // buildServer loads the credentials and the token and registers the tools
 // the permission ceiling allows. Missing credentials are not fatal: the
 // server starts so the client can show why calls fail.
-func buildServer(maxPerms flickr.Perms, namespaces []string) (*mcp.Server, error) {
+func buildServer(maxPerms flickr.Perms, namespaces []string, maxResponseBytes int) (*mcp.Server, error) {
 	configDir, err := flickr.ConfigDir()
 	if err != nil {
 		return nil, err
@@ -108,9 +109,10 @@ func buildServer(maxPerms flickr.Perms, namespaces []string) (*mcp.Server, error
 	}
 	srv := server.New()
 	n := tools.Register(srv, flickr.NewClient(creds, token), tools.Options{
-		MaxPerms:   maxPerms,
-		Authorized: token != nil,
-		Namespaces: namespaces,
+		MaxPerms:         maxPerms,
+		Authorized:       token != nil,
+		Namespaces:       namespaces,
+		MaxResponseBytes: maxResponseBytes,
 	})
 	log.Printf("registered %d tools (max permission %s, method list from %s)", n, maxPerms, tools.SnapshotSource())
 	return srv, nil

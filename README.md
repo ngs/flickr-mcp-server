@@ -57,12 +57,16 @@ takes the method's arguments (`api_key` is added by the server), checks the
 required ones before calling Flickr, and returns Flickr's JSON response.
 Booleans are sent as `1` / `0`.
 
+Paged methods (those with `per_page`) ask for 50 items unless told otherwise;
+the response's `page`, `pages` and `total` say how to continue.
+
 Which tools exist depends on how the server is started:
 
 | Flag | Default | Meaning |
 |---|---|---|
 | `--max-perms` | `read` | The highest permission a tool may need (`read`, `write` or `delete`). Tools that need more are not registered. If the saved token has less, its permission is used. |
 | `--namespaces` | all | Comma-separated namespaces to expose, such as `photos,photosets,tags`. |
+| `--max-response-bytes` | 262144 | Longest response text returned to the client. A longer response is cut, and the tool result says so. |
 
 Without an authorized token, only methods that need no login are registered,
 and calls are not signed. With a token, every call is signed, so results

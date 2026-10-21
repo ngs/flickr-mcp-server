@@ -4,9 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -44,7 +47,7 @@ func TestSetupSavesWithoutEchoingTheSecret(t *testing.T) {
 		answers = answers[1:]
 		return v, nil
 	}
-	if err := c.setup(nil); err != nil {
+	if err := c.setup(context.Background(), nil); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(out.String(), "the-secret") || strings.Contains(out.String(), "the-key") {
@@ -61,7 +64,7 @@ func TestSetupSavesWithoutEchoingTheSecret(t *testing.T) {
 
 func TestSetupRequiresBothValues(t *testing.T) {
 	c, _ := testCLI(t, "key\n\n", nil)
-	if err := c.setup(nil); err == nil {
+	if err := c.setup(context.Background(), nil); err == nil {
 		t.Fatal("want an error for an empty secret")
 	}
 }
@@ -139,5 +142,43 @@ func TestAuthRejectsUnknownPerms(t *testing.T) {
 	c, _ := testCLI(t, "", nil)
 	if err := c.auth(context.Background(), []string{"--perms", "admin"}); err == nil {
 		t.Fatal("want an error")
+	}
+}
+
+// Ctrl-C while a prompt waits for input ends the command, and setup saves
+// nothing.
+func TestSetupStopsOnCancellation(t *testing.T) {
+	c, _ := testCLI(t, "", nil)
+	block := make(chan struct{})
+	t.Cleanup(func() { close(block) })
+	c.readSecret = func() (string, error) { <-block; return "late", nil }
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := c.setup(ctx, nil); !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if _, err := os.Stat(filepath.Join(c.configDir, "credentials")); !os.IsNotExist(err) {
+		t.Fatal("setup must not save after cancellation")
+	}
+}
+
+func TestAuthStopsOnCancellationAtTheCodePrompt(t *testing.T) {
+	srv := flickrStub(t)
+	pr, pw := io.Pipe()
+	t.Cleanup(func() { _ = pw.Close() })
+	c, _ := testCLI(t, "", srv)
+	c.in = bufio.NewReader(pr)
+	if err := flickr.SaveCredentials(c.configDir, flickr.Credentials{APIKey: "k", APISecret: "s"}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- c.auth(ctx, nil) }()
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if _, err := os.Stat(filepath.Join(c.configDir, "token.json")); !os.IsNotExist(err) {
+		t.Fatal("auth must not save a token after cancellation")
 	}
 }

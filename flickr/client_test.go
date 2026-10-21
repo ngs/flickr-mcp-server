@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -151,5 +152,35 @@ func TestOAuthFlow(t *testing.T) {
 	}
 	if second.Get("oauth_signature") != signature("GET", c.AccessTokenURL, second, "secret", "reqsecret") {
 		t.Fatal("access token call is not signed with the request token secret")
+	}
+}
+
+type failingTransport struct{}
+
+func (failingTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("connection refused")
+}
+
+// A transport error must not carry the request URL's query: for signed GETs it
+// holds the API key, the token, the signature and the verifier.
+func TestTransportErrorsDoNotLeakTheQuery(t *testing.T) {
+	c, _ := testClient(t, func(http.ResponseWriter, *http.Request, recorded) {})
+	c.HTTP = &http.Client{Transport: failingTransport{}}
+
+	_, err := c.Call(context.Background(), Request{Method: "flickr.test.login", Sign: true})
+	if err == nil {
+		t.Fatal("want an error")
+	}
+	_, err2 := c.AccessToken(context.Background(), "req", "reqsecret", "the-verifier", PermsRead)
+	for _, e := range []error{err, err2} {
+		msg := e.Error()
+		for _, secret := range []string{"api_key=key", "oauth_token=", "oauth_signature=", "the-verifier", "?"} {
+			if strings.Contains(msg, secret) {
+				t.Fatalf("error leaks %q: %s", secret, msg)
+			}
+		}
+		if !strings.Contains(msg, "connection refused") {
+			t.Fatalf("error lost its cause: %s", msg)
+		}
 	}
 }

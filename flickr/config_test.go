@@ -114,3 +114,28 @@ func TestParsePerms(t *testing.T) {
 		t.Error("permission levels must be ordered")
 	}
 }
+
+// An existing configuration directory others can write to would let them
+// replace the credentials; saving tightens it to 0700.
+func TestSavingTightensAnExistingLooseDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no mode bits on Windows")
+	}
+	dir := filepath.Join(t.TempDir(), "conf")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveToken(dir, Token{Token: "t", TokenSecret: "s"}); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o700 {
+		t.Fatalf("dir mode = %v, want 0700", info.Mode().Perm())
+	}
+}

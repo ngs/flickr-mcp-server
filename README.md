@@ -3,16 +3,25 @@
 An [MCP](https://modelcontextprotocol.io) server that exposes the
 [Flickr API](https://www.flickr.com/services/api/) to MCP clients as tools.
 
-> Work in progress. Not released yet.
-
-## Goals
-
-- Every Flickr API method as a tool, generated from the API's own method
-  descriptions rather than written by hand.
-- Upload and replace, which are not regular API methods, as hand-written tools.
+- Every Flickr API method (224 of them) is a tool, generated from the API's
+  own description of its methods rather than written by hand.
+- Upload, replace and download, which are not regular API methods, are
+  hand-written tools confined to directories you choose.
 - OAuth 1.0a, with a permission ceiling (`read`, `write` or `delete`) chosen
-  when the server starts. Tools that need more than the ceiling are not
-  registered at all.
+  when the server starts. Tools that need more are not registered at all.
+
+## Install
+
+From source (Go 1.26 or later):
+
+```sh
+git clone git@github.com:ngs/flickr-mcp-server.git
+cd flickr-mcp-server
+go install .
+```
+
+Release archives (Linux, macOS and Windows on amd64 and arm64, plus deb, rpm
+and apk packages) are built by GoReleaser when a version tag is pushed.
 
 ## Setup
 
@@ -76,14 +85,35 @@ and calls are not signed. With a token, every call is signed, so results
 include what the account can see. The retired `flickr.auth.*` methods are not
 exposed; authorization is done with `flickr-mcp-server auth`.
 
-Example `.mcp.json` for Claude Code:
+How many tools that gives with all namespaces:
+
+| Token | `--max-perms` | Tools |
+|---|---|---|
+| none | any | 92 (methods that need no login) |
+| yes | `read` | 152 |
+| yes | `write` | 215 |
+| yes | `delete` | 218 |
+
+Hand-written file tools come on top (see below). If your client struggles with
+that many, narrow it with `--namespaces`.
+
+## Use with Claude Code
+
+```sh
+claude mcp add flickr -- flickr-mcp-server --max-perms write --download-dir ~/Pictures/flickr
+```
+
+or in `.mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "flickr": {
       "command": "flickr-mcp-server",
-      "args": ["--max-perms", "write"]
+      "args": ["--max-perms", "write", "--download-dir", "/Users/you/Pictures/flickr"],
+      "env": {
+        "FLICKR_MCP_CREDENTIALS": "/Users/you/path/to/credentials"
+      }
     }
   }
 }
@@ -124,6 +154,17 @@ snapshot.
 stub. `make e2e` calls read-only tools (and a download into a temporary
 directory) against the real API with your own credentials and token; it never
 calls a tool that changes anything on Flickr.
+
+## Releasing
+
+```sh
+make set-version VERSION=v0.1.0   # updates server/version.go; commit it on main
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+The release workflow refuses a tag that does not match `server/version.go`,
+runs the tests and publishes with GoReleaser. `make release-snapshot` builds
+every archive locally without publishing.
 
 ## License
 

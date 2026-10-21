@@ -1,0 +1,68 @@
+version: 2
+
+project_name: flickr-mcp-server
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+    binary: flickr-mcp-server
+
+archives:
+  - formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+
+release:
+  github:
+    owner: ngs
+    name: flickr-mcp-server
+  draft: false
+  prerelease: auto
+  name_template: "{{ .ProjectName }}-v{{ .Version }}"
+
+nfpms:
+  - maintainer: Atsushi Nagase <a@ngs.io>
+    description: MCP server exposing the Flickr API as tools
+    homepage: https://github.com/ngs/flickr-mcp-server
+    license: MIT
+    formats:
+      - deb
+      - rpm
+      - apk
+
+# A Homebrew formula (ngs/homebrew-tap) is added when the repository becomes
+# public: the formula downloads release assets, which a private repository
+# does not serve to anonymous users.

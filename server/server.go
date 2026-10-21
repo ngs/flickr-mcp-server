@@ -13,7 +13,9 @@ import (
 // ServerName is the implementation name reported in the initialize handshake.
 const ServerName = "flickr-mcp-server"
 
-const instructions = "Tools for the Flickr API. Each flickr_* tool calls the Flickr API method of the same name (dots replaced by underscores)."
+const instructions = "Tools for the Flickr API. Each flickr_* tool calls the Flickr API method of the same name with dots replaced by underscores (flickr_photos_search is flickr.photos.search) and returns Flickr's JSON. " +
+	"Use \"me\" as user_id for the authorized account. Paged methods return 50 items unless per_page says otherwise; follow page and pages to continue. " +
+	"Only tools within the server's permission ceiling are listed. flickr_upload, flickr_replace and flickr_download, when present, work only with paths relative to the directories the server was started with."
 
 // New builds the MCP server. Tools are registered by the caller.
 func New() *mcp.Server {

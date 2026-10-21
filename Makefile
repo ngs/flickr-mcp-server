@@ -42,9 +42,10 @@ release-snapshot:
 	go run github.com/goreleaser/goreleaser/v2@latest release --snapshot --clean
 
 # Fails when total statement coverage drops below COVERAGE_MIN percent.
-# tools/zz_generated.go is a data table with no statements, so it does not
-# count either way.
-COVERAGE_MIN ?= 85
+# -coverpkg counts code reached from another package's tests (the stdio server
+# is exercised from main's). tools/zz_generated.go is a data table with no
+# statements, so it does not count either way.
+COVERAGE_MIN ?= 98
 coverage:
-	go test -race -coverprofile=coverage.txt -covermode=atomic ./...
+	go test -race -coverpkg=./... -coverprofile=coverage.txt -covermode=atomic ./...
 	@go tool cover -func=coverage.txt | awk -v min=$(COVERAGE_MIN) '/^total:/ { sub("%", "", $$3); printf "total coverage: %s%% (minimum %s%%)\n", $$3, min; if ($$3 + 0 < min) { print "coverage is below the minimum"; exit 1 } }'

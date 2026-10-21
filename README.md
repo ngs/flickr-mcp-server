@@ -165,7 +165,7 @@ snapshot.
 ## Testing
 
 `go test ./...` never touches the network: Flickr is replaced by an HTTP
-stub. `make coverage` measures statement coverage and fails below 85% (CI runs
+stub. `make coverage` measures statement coverage and fails below 98% (CI runs
 it too). `make e2e` calls read-only tools (and a download into a temporary
 directory) against the real API with your own credentials and token; it never
 calls a tool that changes anything on Flickr.

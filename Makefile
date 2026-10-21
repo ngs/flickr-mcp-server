@@ -1,4 +1,4 @@
-.PHONY: build test generate lint fmt check e2e set-version release-snapshot
+.PHONY: build test generate lint fmt check e2e set-version release-snapshot coverage
 
 BINARY_NAME=flickr-mcp-server
 
@@ -40,3 +40,11 @@ set-version:
 # Builds every release archive locally without publishing anything.
 release-snapshot:
 	go run github.com/goreleaser/goreleaser/v2@latest release --snapshot --clean
+
+# Fails when total statement coverage drops below COVERAGE_MIN percent.
+# tools/zz_generated.go is a data table with no statements, so it does not
+# count either way.
+COVERAGE_MIN ?= 85
+coverage:
+	go test -race -coverprofile=coverage.txt -covermode=atomic ./...
+	@go tool cover -func=coverage.txt | awk -v min=$(COVERAGE_MIN) '/^total:/ { sub("%", "", $$3); printf "total coverage: %s%% (minimum %s%%)\n", $$3, min; if ($$3 + 0 < min) { print "coverage is below the minimum"; exit 1 } }'

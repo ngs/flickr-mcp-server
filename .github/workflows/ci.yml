@@ -45,8 +45,8 @@ jobs:
       - name: Build
         run: go build ./...
 
-      - name: Test
-        run: go test -race -timeout=300s -coverprofile=coverage.txt -covermode=atomic ./...
+      - name: Test with coverage (fails below the minimum in the Makefile)
+        run: make coverage
 
   lint:
     name: Lint

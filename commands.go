@@ -8,14 +8,17 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 
 	"golang.org/x/term"
 
 	"go.ngs.io/flickr-mcp-server/flickr"
+	"go.ngs.io/flickr-mcp-server/snapshot"
 )
 
 // cli carries what the subcommands read and write, so tests can drive them.
@@ -278,4 +281,42 @@ func openBrowser(u string) error {
 		cmd = exec.Command("xdg-open", u) // #nosec G204
 	}
 	return cmd.Start()
+}
+
+// snapshotCmd writes api/methods.json from the documentation pages (no key
+// needed) or from the reflection API (needs the API key).
+func (c *cli) snapshotCmd(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("snapshot", flag.ContinueOnError)
+	fs.SetOutput(c.errOut)
+	source := fs.String("source", "docs", "docs or reflection")
+	out := fs.String("o", "api/methods.json", "output file")
+	delay := fs.Duration("delay", 500*time.Millisecond, "pause between requests")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	var s *snapshot.Snapshot
+	var err error
+	switch *source {
+	case "docs":
+		s, err = snapshot.FromDocs(ctx, snapshot.HTTPFetcher(&http.Client{Timeout: 30 * time.Second}), snapshot.DocsBaseURL, *delay)
+	case "reflection":
+		creds, cerr := flickr.LoadCredentials(c.configDir)
+		if cerr != nil {
+			return cerr
+		}
+		if creds.APIKey == "" {
+			return fmt.Errorf("the reflection source needs an API key; run `flickr-mcp-server setup` or set %s", flickr.EnvAPIKey)
+		}
+		s, err = snapshot.FromReflection(ctx, c.newClient(creds, nil), *delay)
+	default:
+		return fmt.Errorf("unknown source %q (want docs or reflection)", *source)
+	}
+	if err != nil {
+		return err
+	}
+	if err := s.Write(*out); err != nil {
+		return err
+	}
+	c.printf("Wrote %d methods from %s to %s\n", len(s.Methods), s.Source, *out)
+	return nil
 }

@@ -40,36 +40,47 @@ func (c *Client) Sizes(ctx context.Context, photoID string) ([]Size, error) {
 	return res.Sizes.Size, nil
 }
 
-// Download writes the photo at the size with the given label (as
-// flickr.photos.getSizes names it, e.g. "Original" or "Large 2048") to w.
-func (c *Client) Download(ctx context.Context, photoID, label string, w io.Writer) (Size, int64, error) {
+// PickSize returns the size with the given label (as flickr.photos.getSizes
+// names it, e.g. "Original" or "Large 2048"); an unknown label lists the
+// available ones.
+func (c *Client) PickSize(ctx context.Context, photoID, label string) (Size, error) {
 	sizes, err := c.Sizes(ctx, photoID)
 	if err != nil {
-		return Size{}, 0, err
+		return Size{}, err
 	}
-	var chosen *Size
 	var labels []string
-	for i := range sizes {
-		labels = append(labels, sizes[i].Label)
-		if strings.EqualFold(sizes[i].Label, label) {
-			chosen = &sizes[i]
+	for _, s := range sizes {
+		if strings.EqualFold(s.Label, label) {
+			return s, nil
 		}
+		labels = append(labels, s.Label)
 	}
-	if chosen == nil {
-		return Size{}, 0, fmt.Errorf("photo %s has no size %q; available: %s", photoID, label, strings.Join(labels, ", "))
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, chosen.Source, nil)
+	return Size{}, fmt.Errorf("photo %s has no size %q; available: %s", photoID, label, strings.Join(labels, ", "))
+}
+
+// Fetch streams the file at source (a size's Source URL) to w.
+func (c *Client) Fetch(ctx context.Context, source string, w io.Writer) (int64, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, source, nil)
 	if err != nil {
-		return Size{}, 0, err
+		return 0, err
 	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return Size{}, 0, err
+		return 0, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return Size{}, 0, fmt.Errorf("GET %s: HTTP %d", chosen.Source, resp.StatusCode)
+		return 0, fmt.Errorf("GET %s: HTTP %d", source, resp.StatusCode)
 	}
-	n, err := io.Copy(w, resp.Body)
-	return *chosen, n, err
+	return io.Copy(w, resp.Body)
+}
+
+// Download writes the photo at the size with the given label to w.
+func (c *Client) Download(ctx context.Context, photoID, label string, w io.Writer) (Size, int64, error) {
+	size, err := c.PickSize(ctx, photoID, label)
+	if err != nil {
+		return Size{}, 0, err
+	}
+	n, err := c.Fetch(ctx, size.Source, w)
+	return size, n, err
 }

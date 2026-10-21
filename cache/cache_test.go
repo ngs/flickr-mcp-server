@@ -26,10 +26,10 @@ func TestNameFollowsTheConvention(t *testing.T) {
 		}
 	}
 	for _, bad := range []struct{ id, source string }{
-		{"1", "https://www.flickr.com/photos/x/1/play/site/abc/"},          // a video page, not a file
-		{"2", "https://live.staticflickr.com/65535/1_1d148ca9ac_m.jpg"},  // another photo
-		{"1", "https://live.staticflickr.com/65535/1_NOTHEX_m.jpg"},      // not a secret
-		{"1", "::"},                                                    // not a URL
+		{"1", "https://www.flickr.com/photos/x/1/play/site/abc/"},       // a video page, not a file
+		{"2", "https://live.staticflickr.com/65535/1_1d148ca9ac_m.jpg"}, // another photo
+		{"1", "https://live.staticflickr.com/65535/1_NOTHEX_m.jpg"},     // not a secret
+		{"1", "::"}, // not a URL
 		{"../1", "https://live.staticflickr.com/65535/../1_1d1_m.jpg"}, // not an id
 	} {
 		if name, err := Name(bad.id, bad.source, "Large"); err == nil {
@@ -96,8 +96,8 @@ func TestPlanPurge(t *testing.T) {
 	write(t, dir, "3_cc_small.jpg", 50, 24*time.Hour)
 	s, _ := Scan(dir)
 
-	// Down to 150 bytes: the two oldest go (200 + 50), leaving 100.
-	got := PlanToSize(s, 150)
+	// Down to 100 bytes: the two oldest go (200 + 50), leaving 100.
+	got := PlanToSize(s, 100)
 	if len(got) != 2 || got[0].Name != "2_bb_large.jpg" || got[1].Name != "3_cc_small.jpg" {
 		t.Fatalf("to size: %+v", got)
 	}

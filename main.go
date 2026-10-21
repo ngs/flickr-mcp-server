@@ -73,6 +73,7 @@ func run(ctx context.Context, stop func(), args []string, stdout io.Writer, serv
 	namespacesFlag := fs.String("namespaces", "", "comma-separated namespaces to expose (e.g. photos,photosets); empty means all")
 	uploadDirFlag := fs.String("upload-dir", "", "directory flickr_upload and flickr_replace may read from; empty leaves them out")
 	downloadDirFlag := fs.String("download-dir", "", "directory flickr_download may write to; empty leaves it out")
+	cacheWarnFlag := fs.Int64("cache-warn-bytes", tools.DefaultCacheWarnBytes, "image cache size above which downloads suggest removing old images")
 	maxResponseFlag := fs.Int("max-response-bytes", tools.DefaultMaxResponseBytes, "longest response text returned to the client; longer ones are cut")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -94,6 +95,7 @@ func run(ctx context.Context, stop func(), args []string, stdout io.Writer, serv
 		maxResponseBytes: *maxResponseFlag,
 		uploadDir:        *uploadDirFlag,
 		downloadDir:      *downloadDirFlag,
+		cacheWarnBytes:   *cacheWarnFlag,
 	})
 	if err != nil {
 		log.Print(err)
@@ -115,6 +117,7 @@ type serverConfig struct {
 	maxResponseBytes int
 	uploadDir        string
 	downloadDir      string
+	cacheWarnBytes   int64
 }
 
 func buildServer(cfg serverConfig) (*mcp.Server, error) {
@@ -151,7 +154,7 @@ func buildServer(cfg serverConfig) (*mcp.Server, error) {
 		Namespaces:       cfg.namespaces,
 		MaxResponseBytes: cfg.maxResponseBytes,
 	})
-	fileOpts := tools.FileOptions{MaxPerms: maxPerms, Authorized: token != nil}
+	fileOpts := tools.FileOptions{MaxPerms: maxPerms, Authorized: token != nil, CacheWarnBytes: cfg.cacheWarnBytes}
 	if cfg.uploadDir != "" {
 		dir, err := localfs.Open(cfg.uploadDir)
 		if err != nil {

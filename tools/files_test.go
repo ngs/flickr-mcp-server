@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -26,6 +27,7 @@ type fakeFiles struct {
 	source   string
 	fetches  int
 	fetchErr error
+	sizeErr  error
 }
 
 func (f *fakeFiles) Upload(_ context.Context, path string, fields url.Values) (flickr.UploadResult, error) {
@@ -39,6 +41,9 @@ func (f *fakeFiles) Replace(_ context.Context, path, photoID string, fields url.
 }
 
 func (f *fakeFiles) PickSize(_ context.Context, photoID, label string) (flickr.Size, error) {
+	if f.sizeErr != nil {
+		return flickr.Size{}, f.sizeErr
+	}
 	source := f.source
 	if source == "" {
 		source = "https://live.staticflickr.com/65535/" + photoID + "_abc123_b.jpg"
@@ -314,7 +319,7 @@ func TestCacheStatusAndPurge(t *testing.T) {
 	}
 
 	// Dry run by default: the plan, nothing removed.
-	plan := result(t, mustCall(t, cs, "flickr_cache_purge", map[string]any{"target_bytes": 150}))
+	plan := result(t, mustCall(t, cs, "flickr_cache_purge", map[string]any{"target_bytes": 100}))
 	if plan["dry_run"] != true || plan["bytes"] != float64(250) || len(plan["files"].([]any)) != 2 {
 		t.Fatalf("plan = %v", plan)
 	}
@@ -341,5 +346,54 @@ func TestCacheStatusAndPurge(t *testing.T) {
 		if _, isErr := call(t, cs, "flickr_cache_purge", args); !isErr {
 			t.Errorf("purge %v must fail: exactly one non-negative criterion", args)
 		}
+	}
+}
+
+func TestCacheToolErrors(t *testing.T) {
+	d := openDir(t)
+	cs, _ := fileSession(t, &fakeFiles{sizeErr: errors.New("photo not found")}, FileOptions{DownloadDir: &d})
+	for name, args := range map[string]map[string]any{
+		"flickr_download":     {"photo_id": "1"},
+		"flickr_cache_status": {"limit": -1},
+		"flickr_cache_purge":  {"bogus": 1},
+	} {
+		if _, isErr := call(t, cs, name, args); !isErr {
+			t.Errorf("%s %v must fail", name, args)
+		}
+	}
+	if _, isErr := call(t, cs, "flickr_cache_status", map[string]any{"bogus": 1}); !isErr {
+		t.Error("an unknown argument must fail")
+	}
+
+	// Nothing to remove is an empty list, not null.
+	none := result(t, mustCall(t, cs, "flickr_cache_purge", map[string]any{"target_bytes": 1 << 40}))
+	if files, ok := none["files"].([]any); !ok || len(files) != 0 {
+		t.Fatalf("files = %v", none["files"])
+	}
+
+	if err := os.Remove(d.Root()); err != nil {
+		t.Fatal(err)
+	}
+	if _, isErr := call(t, cs, "flickr_cache_status", nil); !isErr {
+		t.Error("status on a missing directory must fail")
+	}
+	if _, isErr := call(t, cs, "flickr_cache_purge", map[string]any{"older_than_days": 1}); !isErr {
+		t.Error("purge on a missing directory must fail")
+	}
+}
+
+func TestPurgeReportsFilesItCannotRemove(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Getuid() == 0 {
+		t.Skip("needs a directory the user cannot write to")
+	}
+	d := openDir(t)
+	cacheFile(t, d, "1_aa_large.jpg", 10, 72*time.Hour)
+	if err := os.Chmod(d.Root(), 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(d.Root(), 0o700) })
+	cs, _ := fileSession(t, &fakeFiles{}, FileOptions{DownloadDir: &d})
+	if _, isErr := call(t, cs, "flickr_cache_purge", map[string]any{"target_bytes": 0, "dry_run": false}); !isErr {
+		t.Fatal("a file that cannot be removed must be reported")
 	}
 }

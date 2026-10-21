@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/url"
 	"os"
@@ -147,5 +148,50 @@ func TestDownloadWritesInsideTheDirectory(t *testing.T) {
 	}
 	if _, isErr := call(t, cs, "flickr_download", map[string]any{"photo_id": "1", "path": "../out.jpg"}); !isErr {
 		t.Fatal("a path outside the directory must be refused")
+	}
+}
+
+type failingDownload struct{ fakeFiles }
+
+func (*failingDownload) Download(_ context.Context, _, _ string, w io.Writer) (flickr.Size, int64, error) {
+	_, _ = io.WriteString(w, "PART")
+	return flickr.Size{}, 4, errors.New("connection reset")
+}
+
+func TestFileToolArgumentErrors(t *testing.T) {
+	d := openDir(t)
+	if err := os.WriteFile(filepath.Join(d.Root(), "a.jpg"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cs, _ := fileSession(t, &fakeFiles{}, FileOptions{UploadDir: &d, DownloadDir: &d, MaxPerms: flickr.PermsWrite, Authorized: true})
+	for name, args := range map[string]map[string]any{
+		"flickr_upload":   {"title": "no path"},
+		"flickr_replace":  {"path": "a.jpg"},
+		"flickr_download": {"path": "x.jpg"},
+	} {
+		if _, isErr := call(t, cs, name, args); !isErr {
+			t.Errorf("%s without its required arguments must fail", name)
+		}
+	}
+	if _, isErr := call(t, cs, "flickr_replace", map[string]any{"path": "../a.jpg", "photo_id": "1"}); !isErr {
+		t.Error("replace outside the directory must fail")
+	}
+}
+
+func TestAFailedDownloadLeavesNoFile(t *testing.T) {
+	d := openDir(t)
+	cs, _ := fileSession(t, &failingDownload{}, FileOptions{DownloadDir: &d})
+	text, isErr := call(t, cs, "flickr_download", map[string]any{"photo_id": "1", "path": "x.jpg"})
+	if !isErr || !strings.Contains(text, "connection reset") {
+		t.Fatalf("result = %s", text)
+	}
+	if _, err := os.Stat(filepath.Join(d.Root(), "x.jpg")); !os.IsNotExist(err) {
+		t.Fatal("a half-written file must be removed")
+	}
+}
+
+func TestUploadErrorsReachTheClient(t *testing.T) {
+	if res, _ := jsonResult(nil, errors.New("quota exceeded")); !res.IsError {
+		t.Fatal("an error must become a tool error")
 	}
 }

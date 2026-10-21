@@ -316,3 +316,17 @@ func TestScalarAndAccessors(t *testing.T) {
 		t.Fatal("a name without a namespace")
 	}
 }
+
+// A method that needs a user but no permission (none in today's list, but
+// the reflection API allows it) is left out without a token.
+func TestLoginOnlyMethodsNeedAToken(t *testing.T) {
+	saved := methods
+	t.Cleanup(func() { methods = saved })
+	methods = []Method{{Name: "flickr.x.mine", NeedsLogin: true}, {Name: "flickr.x.public"}}
+	if got := Selected(Options{MaxPerms: flickr.PermsRead}); len(got) != 1 || got[0].Name != "flickr.x.public" {
+		t.Fatalf("without a token: %+v", got)
+	}
+	if got := Selected(Options{MaxPerms: flickr.PermsRead, Authorized: true}); len(got) != 2 {
+		t.Fatalf("with a token: %+v", got)
+	}
+}

@@ -118,3 +118,32 @@ func TestOpenNeedsADirectory(t *testing.T) {
 		t.Fatal("a missing directory must fail")
 	}
 }
+
+func TestReadPathNeedsAnExistingRegularFile(t *testing.T) {
+	d, root := setup(t)
+	if _, err := d.ReadPath("missing.jpg"); err == nil {
+		t.Error("a missing file must fail")
+	}
+	if err := os.Mkdir(filepath.Join(root, "dir"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.ReadPath("dir"); err == nil {
+		t.Error("a directory is not a file to upload")
+	}
+}
+
+func TestCreateFailures(t *testing.T) {
+	d, root := setup(t)
+	if err := os.WriteFile(filepath.Join(root, "file"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := d.Create("file/x.jpg", false); err == nil {
+		t.Error("a parent that is a file must fail")
+	}
+	if err := os.Mkdir(filepath.Join(root, "dir"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := d.Create("dir", true); err == nil {
+		t.Error("a directory cannot be overwritten with a photo")
+	}
+}

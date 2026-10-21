@@ -156,3 +156,9 @@ func TestReadAndWriteErrors(t *testing.T) {
 		t.Error("an unwritable path must fail")
 	}
 }
+
+func TestParseMethodPageNeedsAName(t *testing.T) {
+	if _, err := ParseMethodPage(`<h3>Authentication</h3><p>This method does not require authentication.</p><h3>`); err == nil {
+		t.Fatal("a page without the method name must fail")
+	}
+}

@@ -12,16 +12,33 @@ An [MCP](https://modelcontextprotocol.io) server that exposes the
 
 ## Install
 
-From source (Go 1.26 or later):
+> Homebrew and the release binaries become available with the first tagged
+> release, once the repository is public. Until then, build from source.
+
+Homebrew (macOS and Linux):
 
 ```sh
-git clone git@github.com:ngs/flickr-mcp-server.git
+brew install ngs/tap/flickr-mcp-server
+```
+
+Go (1.26 or later):
+
+```sh
+go install go.ngs.io/flickr-mcp-server@latest
+```
+
+Binaries: download the archive for your platform (Linux, macOS and Windows on
+amd64 and arm64, or a deb, rpm or apk package) from
+[GitHub Releases](https://github.com/ngs/flickr-mcp-server/releases), unpack
+it and put `flickr-mcp-server` on your `PATH`.
+
+From source:
+
+```sh
+git clone https://github.com/ngs/flickr-mcp-server.git
 cd flickr-mcp-server
 go install .
 ```
-
-Release archives (Linux, macOS and Windows on amd64 and arm64, plus deb, rpm
-and apk packages) are built by GoReleaser when a version tag is pushed.
 
 ## Setup
 
@@ -151,7 +168,8 @@ snapshot.
 ## Testing
 
 `go test ./...` never touches the network: Flickr is replaced by an HTTP
-stub. `make e2e` calls read-only tools (and a download into a temporary
+stub. `make coverage` measures statement coverage and fails below 85% (CI runs
+it too). `make e2e` calls read-only tools (and a download into a temporary
 directory) against the real API with your own credentials and token; it never
 calls a tool that changes anything on Flickr.
 

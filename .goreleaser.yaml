@@ -63,6 +63,30 @@ nfpms:
       - rpm
       - apk
 
-# A Homebrew formula (ngs/homebrew-tap) is added when the repository becomes
-# public: the formula downloads release assets, which a private repository
-# does not serve to anonymous users.
+# A cask goes to ngs/homebrew-tap (brew install ngs/tap/flickr-mcp-server).
+# GoReleaser deprecated formulas (brews) in favour of casks for prebuilt
+# binaries. skip_upload stays true while this repository is private: the cask
+# would point at release assets that anonymous users cannot download. Set it
+# to false and add HOMEBREW_TAP_GITHUB_TOKEN to the release workflow when the
+# repository becomes public.
+homebrew_casks:
+  - name: flickr-mcp-server
+    homepage: https://github.com/ngs/flickr-mcp-server
+    description: MCP server exposing the Flickr API as tools
+    license: MIT
+    skip_upload: true
+    binaries:
+      - flickr-mcp-server
+    repository:
+      owner: ngs
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/flickr-mcp-server"]
+          end

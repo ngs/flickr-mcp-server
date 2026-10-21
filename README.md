@@ -86,6 +86,18 @@ Example `.mcp.json` for Claude Code:
 }
 ```
 
+## Files
+
+Uploading and downloading touch local files, so they are off until you name
+a directory for them:
+
+| Flag | Tools |
+|---|---|
+| `--upload-dir DIR` | `flickr_upload` (new photo or video) and `flickr_replace` (new file for an existing photo). They read only regular files inside `DIR`, after following symlinks, and need a token with `write` permission and `--max-perms write` or higher. |
+| `--download-dir DIR` | `flickr_download` saves a photo at one of the sizes `flickr.photos.getSizes` lists (`Large` by default). It writes only inside `DIR`, never through a symlink, and keeps existing files unless `overwrite` is set. |
+
+Paths given to these tools are relative to the directory.
+
 ## The method list
 
 The tools are generated from `api/methods.json`, a snapshot of every API

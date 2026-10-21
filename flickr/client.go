@@ -31,6 +31,9 @@ type Client struct {
 	RequestTokenURL string
 	AuthorizeURL    string
 	AccessTokenURL  string
+	// UploadURL and ReplaceURL default to the up.flickr.com endpoints.
+	UploadURL  string
+	ReplaceURL string
 
 	signer signer
 }

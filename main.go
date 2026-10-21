@@ -25,6 +25,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"go.ngs.io/flickr-mcp-server/flickr"
+	"go.ngs.io/flickr-mcp-server/localfs"
 	"go.ngs.io/flickr-mcp-server/server"
 	"go.ngs.io/flickr-mcp-server/tools"
 )
@@ -57,6 +58,8 @@ func main() {
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	maxPermsFlag := flag.String("max-perms", "read", "highest permission a tool may need: read, write or delete")
 	namespacesFlag := flag.String("namespaces", "", "comma-separated namespaces to expose (e.g. photos,photosets); empty means all")
+	uploadDirFlag := flag.String("upload-dir", "", "directory flickr_upload and flickr_replace may read from; empty leaves them out")
+	downloadDirFlag := flag.String("download-dir", "", "directory flickr_download may write to; empty leaves it out")
 	maxResponseFlag := flag.Int("max-response-bytes", tools.DefaultMaxResponseBytes, "longest response text returned to the client; longer ones are cut")
 	flag.Parse()
 
@@ -69,7 +72,13 @@ func main() {
 	if err != nil || maxPerms == flickr.PermsNone {
 		log.Fatalf("--max-perms must be read, write or delete")
 	}
-	srv, err := buildServer(maxPerms, splitList(*namespacesFlag), *maxResponseFlag)
+	srv, err := buildServer(serverConfig{
+		maxPerms:         maxPerms,
+		namespaces:       splitList(*namespacesFlag),
+		maxResponseBytes: *maxResponseFlag,
+		uploadDir:        *uploadDirFlag,
+		downloadDir:      *downloadDirFlag,
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -82,7 +91,16 @@ func main() {
 // buildServer loads the credentials and the token and registers the tools
 // the permission ceiling allows. Missing credentials are not fatal: the
 // server starts so the client can show why calls fail.
-func buildServer(maxPerms flickr.Perms, namespaces []string, maxResponseBytes int) (*mcp.Server, error) {
+type serverConfig struct {
+	maxPerms         flickr.Perms
+	namespaces       []string
+	maxResponseBytes int
+	uploadDir        string
+	downloadDir      string
+}
+
+func buildServer(cfg serverConfig) (*mcp.Server, error) {
+	maxPerms := cfg.maxPerms
 	configDir, err := flickr.ConfigDir()
 	if err != nil {
 		return nil, err
@@ -108,12 +126,29 @@ func buildServer(maxPerms flickr.Perms, namespaces []string, maxResponseBytes in
 		return nil, err
 	}
 	srv := server.New()
-	n := tools.Register(srv, flickr.NewClient(creds, token), tools.Options{
+	client := flickr.NewClient(creds, token)
+	n := tools.Register(srv, client, tools.Options{
 		MaxPerms:         maxPerms,
 		Authorized:       token != nil,
-		Namespaces:       namespaces,
-		MaxResponseBytes: maxResponseBytes,
+		Namespaces:       cfg.namespaces,
+		MaxResponseBytes: cfg.maxResponseBytes,
 	})
+	fileOpts := tools.FileOptions{MaxPerms: maxPerms, Authorized: token != nil}
+	if cfg.uploadDir != "" {
+		dir, err := localfs.Open(cfg.uploadDir)
+		if err != nil {
+			return nil, fmt.Errorf("--upload-dir: %w", err)
+		}
+		fileOpts.UploadDir = &dir
+	}
+	if cfg.downloadDir != "" {
+		dir, err := localfs.Open(cfg.downloadDir)
+		if err != nil {
+			return nil, fmt.Errorf("--download-dir: %w", err)
+		}
+		fileOpts.DownloadDir = &dir
+	}
+	n += tools.RegisterFiles(srv, client, fileOpts)
 	log.Printf("registered %d tools (max permission %s, method list from %s)", n, maxPerms, tools.SnapshotSource())
 	return srv, nil
 }

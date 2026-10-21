@@ -1,4 +1,4 @@
-.PHONY: build test generate lint fmt check
+.PHONY: build test generate lint fmt check e2e
 
 BINARY_NAME=flickr-mcp-server
 
@@ -25,3 +25,7 @@ check:
 	go build ./...
 	go test -race ./...
 	golangci-lint run ./...
+
+# Calls read-only tools against the real Flickr API with your credentials.
+e2e:
+	FLICKR_E2E=1 go test -run TestE2EReadOnly -v -count=1 .

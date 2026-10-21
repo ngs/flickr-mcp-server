@@ -32,7 +32,8 @@ An [MCP](https://modelcontextprotocol.io) server that exposes the
    FLICKR_API_SECRET=...
    ```
 
-   The environment variables of the same names override the file. A
+   The environment variables of the same names override the file, and
+   `FLICKR_MCP_CREDENTIALS` can point at a credentials file somewhere else. A
    credentials or token file that other users can read is refused.
 3. Authorize your Flickr account. The permission you ask for is the most the
    server can ever use:
@@ -41,7 +42,9 @@ An [MCP](https://modelcontextprotocol.io) server that exposes the
    flickr-mcp-server auth --perms read   # or write, delete; --open opens the browser
    ```
 
-   Open the printed URL, allow access and paste the code Flickr shows. The
+   Open the printed URL, allow access and paste the code Flickr shows. To do
+   it in two steps (for example when someone else relays the code), run
+   `auth --perms read --start`, then `auth --finish <code>`. The
    access token is saved to `~/.config/flickr-mcp-server/token.json` (mode 0600).
 4. Check it:
 
@@ -114,6 +117,13 @@ It matched the one built from the documentation pages method for method:
 the same names, permissions, POST and signing requirements, arguments and
 descriptions. CI fails if `tools/zz_generated.go` does not match the
 snapshot.
+
+## Testing
+
+`go test ./...` never touches the network: Flickr is replaced by an HTTP
+stub. `make e2e` calls read-only tools (and a download into a temporary
+directory) against the real API with your own credentials and token; it never
+calls a tool that changes anything on Flickr.
 
 ## License
 

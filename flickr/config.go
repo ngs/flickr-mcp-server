@@ -159,6 +159,13 @@ func writeSecret(dir, name string, data []byte) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
+	// MkdirAll leaves an existing directory as it is; one others can write to
+	// would let them replace the files.
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(dir, 0o700); err != nil {
+			return err
+		}
+	}
 	path := filepath.Join(dir, name)
 	tmp, err := os.CreateTemp(dir, name+".*")
 	if err != nil {

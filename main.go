@@ -33,6 +33,9 @@ func main() {
 
 	if len(os.Args) > 1 {
 		if run, ok := subcommand(os.Args[1]); ok {
+			// After the first Ctrl-C has cancelled ctx, let a second one kill
+			// the process the usual way.
+			context.AfterFunc(ctx, stop)
 			configDir, err := flickr.ConfigDir()
 			if err != nil {
 				log.Fatal(err)
@@ -62,7 +65,7 @@ func main() {
 func subcommand(name string) (func(context.Context, *cli, []string) error, bool) {
 	switch name {
 	case "setup":
-		return func(_ context.Context, c *cli, args []string) error { return c.setup(args) }, true
+		return func(ctx context.Context, c *cli, args []string) error { return c.setup(ctx, args) }, true
 	case "auth":
 		return func(ctx context.Context, c *cli, args []string) error { return c.auth(ctx, args) }, true
 	case "whoami":

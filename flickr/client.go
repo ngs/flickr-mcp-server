@@ -129,7 +129,13 @@ func (c *Client) do(ctx context.Context, method, rawURL string, params url.Value
 	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return nil, err
+		// *url.Error quotes the whole URL; for signed GETs its query holds the
+		// API key, the token, the signature and the verifier.
+		var uerr *url.Error
+		if errors.As(err, &uerr) {
+			return nil, fmt.Errorf("%s %s: %w", method, normalizeURL(rawURL), uerr.Err)
+		}
+		return nil, fmt.Errorf("%s %s: %w", method, normalizeURL(rawURL), err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)

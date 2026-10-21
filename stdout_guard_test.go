@@ -33,8 +33,8 @@ type permittedStdoutUse struct {
 var permittedStdoutUses = []permittedStdoutUse{
 	{
 		file:   "main.go",
-		callee: "fmt.Fprintln",
-		reason: "prints --version before the stream starts, then exits",
+		callee: "run",
+		reason: "hands stdout to run, which writes only --version before the stream starts",
 	},
 }
 

@@ -31,7 +31,12 @@ func New() *mcp.Server {
 // The client closing stdin is how a normal shutdown looks from here, so an EOF
 // is reported as a clean return rather than a failure.
 func Run(ctx context.Context, srv *mcp.Server) error {
-	err := srv.Run(ctx, &mcp.StdioTransport{})
+	return RunTransport(ctx, srv, &mcp.StdioTransport{})
+}
+
+// RunTransport is Run over any transport.
+func RunTransport(ctx context.Context, srv *mcp.Server, t mcp.Transport) error {
+	err := srv.Run(ctx, t)
 	switch {
 	case err == nil, errors.Is(err, io.EOF), errors.Is(err, mcp.ErrConnectionClosed):
 		return nil

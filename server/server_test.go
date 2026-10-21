@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -40,5 +42,31 @@ func TestNoToolsWithoutRegistration(t *testing.T) {
 	}
 	if len(res.Tools) != 0 {
 		t.Fatalf("got %d tools, want 0", len(res.Tools))
+	}
+}
+
+func TestRunTransportEndsCleanlyWhenTheClientLeaves(t *testing.T) {
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	done := make(chan error, 1)
+	go func() { done <- RunTransport(context.Background(), New(), serverTransport) }()
+	session, err := mcp.NewClient(&mcp.Implementation{Name: "t", Version: "0"}, nil).Connect(context.Background(), clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = session.Close()
+	if err := <-done; err != nil {
+		t.Fatalf("a client going away is a normal end, got %v", err)
+	}
+}
+
+type brokenTransport struct{}
+
+func (brokenTransport) Connect(context.Context) (mcp.Connection, error) {
+	return nil, errors.New("no stdin")
+}
+
+func TestRunTransportReportsConnectionFailures(t *testing.T) {
+	if err := RunTransport(context.Background(), New(), brokenTransport{}); err == nil || !strings.Contains(err.Error(), "no stdin") {
+		t.Fatalf("err = %v", err)
 	}
 }

@@ -292,3 +292,27 @@ func TestShortResponsesAreUntouched(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestScalarAndAccessors(t *testing.T) {
+	if s, err := scalar(nil); err != nil || s != "" {
+		t.Fatalf("nil: %q %v", s, err)
+	}
+	if _, err := scalar(map[string]any{}); err == nil {
+		t.Fatal("an object is not a scalar")
+	}
+	if _, err := buildParams(Method{Name: "x"}, json.RawMessage(`[1]`)); err == nil {
+		t.Fatal("arguments must be an object")
+	}
+	if _, err := buildParams(Method{Name: "x", Arguments: []Argument{{Name: "a", Optional: true}}}, json.RawMessage(`{"a":{"b":1}}`)); err == nil {
+		t.Fatal("a nested value must be rejected")
+	}
+	if p, err := buildParams(Method{Name: "x"}, json.RawMessage(`null`)); err != nil || len(p) != 0 {
+		t.Fatalf("null arguments: %v %v", p, err)
+	}
+	if len(Methods()) != len(methods) || SnapshotSource() == "" {
+		t.Fatal("accessors")
+	}
+	if (Method{Name: "flickr"}).Namespace() != "" {
+		t.Fatal("a name without a namespace")
+	}
+}

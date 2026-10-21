@@ -234,3 +234,129 @@ func TestFinishWithoutStartFails(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestSnapshotFromDocs(t *testing.T) {
+	c, out := testCLI(t, "", nil)
+	pages := map[string]string{
+		"https://docs.test/":                      `<a href="/services/api/flickr.test.echo.html">echo</a>`,
+		"https://docs.test/flickr.test.echo.html": `<div class="InfoCase"><h1>flickr.test.echo</h1><div class="MethodDescription">Echo.</div><h3>Authentication</h3><p>This method does not require authentication.</p><h3>Arguments</h3><dl><dt><b><code>api_key</code></b> (Required)</dt><dd>Key.</dd></dl>`,
+	}
+	c.docsBaseURL = "https://docs.test/"
+	c.docs = func(_ context.Context, url string) (string, error) {
+		p, ok := pages[url]
+		if !ok {
+			return "", errors.New("unexpected " + url)
+		}
+		return p, nil
+	}
+	path := filepath.Join(t.TempDir(), "methods.json")
+	if err := c.snapshotCmd(context.Background(), []string{"--source", "docs", "-o", path, "--delay", "0"}); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil || !strings.Contains(string(b), `"flickr.test.echo"`) || !strings.Contains(string(b), `"source": "docs"`) {
+		t.Fatalf("snapshot = %s, %v", b, err)
+	}
+	if !strings.Contains(out.String(), "Wrote 1 methods from docs") {
+		t.Fatalf("output = %q", out.String())
+	}
+}
+
+func TestSnapshotFromReflection(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("method") {
+		case "flickr.reflection.getMethods":
+			_, _ = io.WriteString(w, `{"stat":"ok","methods":{"method":[{"_content":"flickr.test.null"}]}}`)
+		case "flickr.reflection.getMethodInfo":
+			_, _ = io.WriteString(w, `{"stat":"ok","method":{"name":"flickr.test.null","needslogin":1,"needssigning":1,"requiredperms":1,"description":{"_content":"Null."}},"arguments":{"argument":[]}}`)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	c, _ := testCLI(t, "", srv)
+	path := filepath.Join(t.TempDir(), "methods.json")
+	if err := c.snapshotCmd(context.Background(), []string{"--source", "reflection", "-o", path}); err == nil {
+		t.Fatal("reflection needs an API key")
+	}
+	if err := flickr.SaveCredentials(c.configDir, flickr.Credentials{APIKey: "k", APISecret: "s"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.snapshotCmd(context.Background(), []string{"--source", "reflection", "-o", path, "--delay", "0"}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(path)
+	if !strings.Contains(string(b), `"requiredperms": 1`) {
+		t.Fatalf("snapshot = %s", b)
+	}
+}
+
+func TestSnapshotRejectsBadUse(t *testing.T) {
+	c, _ := testCLI(t, "", nil)
+	if err := c.snapshotCmd(context.Background(), []string{"--source", "elsewhere"}); err == nil {
+		t.Fatal("unknown source")
+	}
+	if err := c.snapshotCmd(context.Background(), []string{"--bogus"}); err == nil {
+		t.Fatal("unknown flag")
+	}
+	c.docs = func(context.Context, string) (string, error) { return "", errors.New("offline") }
+	if err := c.snapshotCmd(context.Background(), []string{"-o", filepath.Join(t.TempDir(), "m.json")}); err == nil {
+		t.Fatal("a fetch failure must be reported")
+	}
+}
+
+func TestBrowserCommand(t *testing.T) {
+	cases := map[string]string{"darwin": "open", "windows": "rundll32", "linux": "xdg-open", "freebsd": "xdg-open"}
+	for goos, want := range cases {
+		name, args := browserCommand(goos, "https://x/")
+		if name != want || args[len(args)-1] != "https://x/" {
+			t.Errorf("%s: %s %v", goos, name, args)
+		}
+	}
+}
+
+func TestNewCLIOutsideATerminal(t *testing.T) {
+	c := newCLI(t.TempDir())
+	if c.docs == nil || c.docsBaseURL == "" || c.newClient == nil || c.openURL == nil {
+		t.Fatal("newCLI must wire its defaults")
+	}
+}
+
+func TestAuthOpensTheBrowserWhenAsked(t *testing.T) {
+	srv := flickrStub(t)
+	c, out := testCLI(t, "1-2-3\n", srv)
+	var opened string
+	c.openURL = func(u string) error { opened = u; return errors.New("no browser here") }
+	if err := flickr.SaveCredentials(c.configDir, flickr.Credentials{APIKey: "k", APISecret: "s"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.auth(context.Background(), []string{"--open"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(opened, "oauth_token=req") || !strings.Contains(out.String(), "could not open a browser") {
+		t.Fatalf("opened %q, output %q", opened, out.String())
+	}
+}
+
+func TestAuthNeedsACode(t *testing.T) {
+	c, _ := testCLI(t, "\n", flickrStub(t))
+	if err := flickr.SaveCredentials(c.configDir, flickr.Credentials{APIKey: "k", APISecret: "s"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.auth(context.Background(), nil); err == nil {
+		t.Fatal("an empty code must fail")
+	}
+}
+
+func TestWhoamiReportsAPIErrors(t *testing.T) {
+	srv := flickrStub(t)
+	c, _ := testCLI(t, "", srv)
+	if err := flickr.SaveCredentials(c.configDir, flickr.Credentials{APIKey: "k", APISecret: "s"}); err != nil {
+		t.Fatal(err)
+	}
+	// The stub rejects any token other than "acc".
+	if err := flickr.SaveToken(c.configDir, flickr.Token{Token: "stale", TokenSecret: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.whoami(context.Background(), nil); err == nil || !strings.Contains(err.Error(), "Invalid auth token") {
+		t.Fatalf("err = %v", err)
+	}
+}

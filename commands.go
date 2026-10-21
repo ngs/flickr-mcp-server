@@ -37,15 +37,20 @@ type cli struct {
 	saveTerminal func() (restore func())
 	newClient    func(flickr.Credentials, *flickr.Token) *flickr.Client
 	openURL      func(string) error
+	// docs fetches the API documentation for "snapshot --source docs".
+	docs        snapshot.Fetcher
+	docsBaseURL string
 }
 
 func newCLI(configDir string) *cli {
 	c := &cli{
-		in:        bufio.NewReader(os.Stdin),
-		errOut:    os.Stderr,
-		configDir: configDir,
-		newClient: flickr.NewClient,
-		openURL:   openBrowser,
+		in:          bufio.NewReader(os.Stdin),
+		errOut:      os.Stderr,
+		configDir:   configDir,
+		newClient:   flickr.NewClient,
+		openURL:     openBrowser,
+		docs:        snapshot.HTTPFetcher(&http.Client{Timeout: 30 * time.Second}),
+		docsBaseURL: snapshot.DocsBaseURL,
 	}
 	fd := int(os.Stdin.Fd()) // #nosec G115 -- a file descriptor fits in int
 	if term.IsTerminal(fd) {
@@ -271,16 +276,20 @@ func (c *cli) credentials() (flickr.Credentials, error) {
 }
 
 func openBrowser(u string) error {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
+	name, args := browserCommand(runtime.GOOS, u)
+	return exec.Command(name, args...).Start() // #nosec G204 -- the URL is the Flickr authorize URL we built
+}
+
+// browserCommand is the command that opens u on goos.
+func browserCommand(goos, u string) (string, []string) {
+	switch goos {
 	case "darwin":
-		cmd = exec.Command("open", u) // #nosec G204 -- the URL is the Flickr authorize URL we built
+		return "open", []string{u}
 	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", u) // #nosec G204
+		return "rundll32", []string{"url.dll,FileProtocolHandler", u}
 	default:
-		cmd = exec.Command("xdg-open", u) // #nosec G204
+		return "xdg-open", []string{u}
 	}
-	return cmd.Start()
 }
 
 // snapshotCmd writes api/methods.json from the documentation pages (no key
@@ -298,7 +307,7 @@ func (c *cli) snapshotCmd(ctx context.Context, args []string) error {
 	var err error
 	switch *source {
 	case "docs":
-		s, err = snapshot.FromDocs(ctx, snapshot.HTTPFetcher(&http.Client{Timeout: 30 * time.Second}), snapshot.DocsBaseURL, *delay)
+		s, err = snapshot.FromDocs(ctx, c.docs, c.docsBaseURL, *delay)
 	case "reflection":
 		creds, cerr := flickr.LoadCredentials(c.configDir)
 		if cerr != nil {

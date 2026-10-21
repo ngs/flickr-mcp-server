@@ -19,18 +19,21 @@ func main() {
 	in := flag.String("in", "../api/methods.json", "snapshot to read")
 	out := flag.String("out", "zz_generated.go", "Go file to write")
 	flag.Parse()
-
-	s, err := snapshot.Read(*in)
-	if err != nil {
+	if err := run(*in, *out); err != nil {
 		log.Fatal(err)
+	}
+}
+
+func run(in, out string) error {
+	s, err := snapshot.Read(in)
+	if err != nil {
+		return err
 	}
 	src, err := render(s)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	if err := os.WriteFile(*out, src, 0o600); err != nil {
-		log.Fatal(err)
-	}
+	return os.WriteFile(out, src, 0o600)
 }
 
 func render(s *snapshot.Snapshot) ([]byte, error) {

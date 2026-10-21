@@ -16,6 +16,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -38,40 +39,50 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	os.Exit(run(ctx, stop, os.Args[1:], os.Stdout, server.Run))
+}
 
-	if len(os.Args) > 1 {
-		if run, ok := subcommand(os.Args[1]); ok {
+// run is main without the process-wide setup, so tests can drive it. stdout
+// is only written by --version; serve runs the MCP server (server.Run).
+func run(ctx context.Context, stop func(), args []string, stdout io.Writer, serve func(context.Context, *mcp.Server) error) int {
+	if len(args) > 0 {
+		if cmd, ok := subcommand(args[0]); ok {
 			// After the first Ctrl-C has cancelled ctx, let a second one kill
 			// the process the usual way.
 			context.AfterFunc(ctx, stop)
 			configDir, err := flickr.ConfigDir()
 			if err != nil {
-				log.Fatal(err)
+				log.Print(err)
+				return 1
 			}
-			if err := run(ctx, newCLI(configDir), os.Args[2:]); err != nil {
-				log.Printf("%s: %v", os.Args[1], err)
-				os.Exit(1)
+			if err := cmd(ctx, newCLI(configDir), args[1:]); err != nil {
+				log.Printf("%s: %v", args[0], err)
+				return 1
 			}
-			return
+			return 0
 		}
 	}
 
-	showVersion := flag.Bool("version", false, "print the version and exit")
-	maxPermsFlag := flag.String("max-perms", "read", "highest permission a tool may need: read, write or delete")
-	namespacesFlag := flag.String("namespaces", "", "comma-separated namespaces to expose (e.g. photos,photosets); empty means all")
-	uploadDirFlag := flag.String("upload-dir", "", "directory flickr_upload and flickr_replace may read from; empty leaves them out")
-	downloadDirFlag := flag.String("download-dir", "", "directory flickr_download may write to; empty leaves it out")
-	maxResponseFlag := flag.Int("max-response-bytes", tools.DefaultMaxResponseBytes, "longest response text returned to the client; longer ones are cut")
-	flag.Parse()
+	fs := flag.NewFlagSet("flickr-mcp-server", flag.ContinueOnError)
+	showVersion := fs.Bool("version", false, "print the version and exit")
+	maxPermsFlag := fs.String("max-perms", "read", "highest permission a tool may need: read, write or delete")
+	namespacesFlag := fs.String("namespaces", "", "comma-separated namespaces to expose (e.g. photos,photosets); empty means all")
+	uploadDirFlag := fs.String("upload-dir", "", "directory flickr_upload and flickr_replace may read from; empty leaves them out")
+	downloadDirFlag := fs.String("download-dir", "", "directory flickr_download may write to; empty leaves it out")
+	maxResponseFlag := fs.Int("max-response-bytes", tools.DefaultMaxResponseBytes, "longest response text returned to the client; longer ones are cut")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
 
 	if *showVersion {
-		_, _ = fmt.Fprintln(os.Stdout, server.VERSION)
-		return
+		_, _ = fmt.Fprintln(stdout, server.VERSION)
+		return 0
 	}
 
 	maxPerms, err := flickr.ParsePerms(*maxPermsFlag)
 	if err != nil || maxPerms == flickr.PermsNone {
-		log.Fatalf("--max-perms must be read, write or delete")
+		log.Print("--max-perms must be read, write or delete")
+		return 2
 	}
 	srv, err := buildServer(serverConfig{
 		maxPerms:         maxPerms,
@@ -81,12 +92,14 @@ func main() {
 		downloadDir:      *downloadDirFlag,
 	})
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
+		return 1
 	}
-	if err := server.Run(ctx, srv); err != nil && ctx.Err() == nil {
+	if err := serve(ctx, srv); err != nil && ctx.Err() == nil {
 		log.Printf("%v", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 // buildServer loads the credentials and the token and registers the tools

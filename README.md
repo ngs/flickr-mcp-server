@@ -12,9 +12,6 @@ An [MCP](https://modelcontextprotocol.io) server that exposes the
 
 ## Install
 
-> Homebrew and the release binaries become available with the first tagged
-> release, once the repository is public. Until then, build from source.
-
 Homebrew (macOS and Linux):
 
 ```sh

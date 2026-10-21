@@ -1,5 +1,5 @@
 {
-  "source": "docs",
+  "source": "reflection",
   "methods": [
     {
       "name": "flickr.activity.userComments",

@@ -93,11 +93,11 @@ flickr-mcp-server snapshot --source reflection  # from flickr.reflection.* (need
 go generate ./...                               # api/methods.json -> tools/zz_generated.go
 ```
 
-The current snapshot was taken from the API documentation pages on
-2026-10-21 (224 methods). The documentation does not say which methods need
-signing without a user beyond what its "Authentication" section states; the
-reflection API is the authoritative source and replaces it once a key is
-available. CI fails if `tools/zz_generated.go` does not match the snapshot.
+The current snapshot comes from the reflection API (2026-10-21, 224 methods).
+It matched the one built from the documentation pages method for method:
+the same names, permissions, POST and signing requirements, arguments and
+descriptions. CI fails if `tools/zz_generated.go` does not match the
+snapshot.
 
 ## License
 

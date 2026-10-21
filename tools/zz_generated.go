@@ -2,8 +2,8 @@
 
 package tools
 
-// snapshotSource is where api/methods.json came from: "docs".
-const snapshotSource = "docs"
+// snapshotSource is where api/methods.json came from: "reflection".
+const snapshotSource = "reflection"
 
 var methods = []Method{
 	{

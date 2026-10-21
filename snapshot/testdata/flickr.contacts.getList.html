@@ -1,0 +1,43 @@
+	<div class="InfoCase">
+	
+	<h1>flickr.contacts.getList</h1>
+
+
+	<div class="MethodDescription">Get a list of contacts for the calling user.</div>
+
+
+	<h3>Authentication</h3>
+
+	<p>This method requires <a href="/services/api/auth.oauth.html">authentication</a> with 'read' permission.</p>
+
+
+	<h3>Arguments</h3>
+
+	<dl>
+			<dt><b ><code>api_key</code></b> (Required)</dt>
+		<dd>Your API application key. <a href="/services/api/misc.api_keys.html">See here</a> for more details.</dd>
+				<dt><b ><code>filter</code></b> (Optional)</dt>
+		<dd>An optional filter of the results. The following values are valid:<br />
+&nbsp;
+<dl>
+	<dt><b><code>friends</code></b></dt>
+	<dl>Only contacts who are friends (and not family)</dl>
+
+	<dt><b><code>family</code></b></dt>
+	<dl>Only contacts who are family (and not friends)</dl>
+
+	<dt><b><code>both</code></b></dt>
+	<dl>Only contacts who are both friends and family</dl>
+
+	<dt><b><code>neither</code></b></dt>
+	<dl>Only contacts who are neither friends nor family</dl>
+</dl></dd>
+				<dt><b ><code>page</code></b> (Optional)</dt>
+		<dd>The page of results to return. If this argument is omitted, it defaults to 1.</dd>
+				<dt><b ><code>per_page</code></b> (Optional)</dt>
+		<dd>Number of photos to return per page. If this argument is omitted, it defaults to 1000. The maximum allowed value is 1000.</dd>
+				<dt><b ><code>sort</code></b> (Optional)</dt>
+		<dd>The order in which to sort the returned contacts. Defaults to name. The possible values are: name and time.</dd>
+				</dl>
+
+	<h3>Example Response</h3>

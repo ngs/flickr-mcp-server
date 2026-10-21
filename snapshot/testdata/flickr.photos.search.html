@@ -1,0 +1,200 @@
+	<div class="InfoCase">
+	
+	<h1>flickr.photos.search</h1>
+
+
+	<div class="MethodDescription">Return a list of photos matching some criteria. Only photos visible to the calling user will be returned. To return private or semi-private photos, the caller must be authenticated with 'read' permissions, and have permission to view the photos. Unauthenticated calls will only return public photos.</div>
+
+
+	<h3>Authentication</h3>
+
+	<p>This method does not require authentication.</p>
+
+
+	<h3>Arguments</h3>
+
+	<dl>
+			<dt><b ><code>api_key</code></b> (Required)</dt>
+		<dd>Your API application key. <a href="/services/api/misc.api_keys.html">See here</a> for more details.</dd>
+				<dt><b ><code>user_id</code></b> (Optional)</dt>
+		<dd>The NSID of the user who's photo to search. If this parameter isn't passed then everybody's public photos will be searched. A value of "me" will search against the calling user's photos for authenticated calls.</dd>
+				<dt><b ><code>tags</code></b> (Optional)</dt>
+		<dd>A comma-delimited list of tags. Photos with one or more of the tags listed will be returned. You can exclude results that match a term by prepending it with a - character.</dd>
+				<dt><b ><code>tag_mode</code></b> (Optional)</dt>
+		<dd>Either 'any' for an OR combination of tags, or 'all' for an AND combination. Defaults to 'any' if not specified.</dd>
+				<dt><b ><code>text</code></b> (Optional)</dt>
+		<dd>A free text search. Photos who's title, description or tags contain the text will be returned. You can exclude results that match a term by prepending it with a - character.</dd>
+				<dt><b ><code>min_upload_date</code></b> (Optional)</dt>
+		<dd>Minimum upload date. Photos with an upload date greater than or equal to this value will be returned. The date can be in the form of a unix timestamp or mysql datetime.</dd>
+				<dt><b ><code>max_upload_date</code></b> (Optional)</dt>
+		<dd>Maximum upload date. Photos with an upload date less than or equal to this value will be returned. The date can be in the form of a unix timestamp or mysql datetime.</dd>
+				<dt><b ><code>min_taken_date</code></b> (Optional)</dt>
+		<dd>Minimum taken date. Photos with an taken date greater than or equal to this value will be returned. The date can be in the form of a mysql datetime or unix timestamp.</dd>
+				<dt><b ><code>max_taken_date</code></b> (Optional)</dt>
+		<dd>Maximum taken date. Photos with an taken date less than or equal to this value will be returned. The date can be in the form of a mysql datetime or unix timestamp.</dd>
+				<dt><b ><code>license</code></b> (Optional)</dt>
+		<dd>The license id for photos (for possible values see the flickr.photos.licenses.getInfo method). Multiple licenses may be comma-separated.</dd>
+				<dt><b ><code>sort</code></b> (Optional)</dt>
+		<dd>The order in which to sort returned photos. Defaults to date-posted-desc (unless you are doing a radial geo query, in which case the default sorting is by ascending distance from the point specified). The possible values are: date-posted-asc, date-posted-desc, date-taken-asc, date-taken-desc, interestingness-desc, interestingness-asc, and relevance.</dd>
+				<dt><b ><code>privacy_filter</code></b> (Optional)</dt>
+		<dd>Return photos only matching a certain privacy level. This only applies when making an authenticated call to view photos you own. Valid values are:
+<ul>
+<li>1 public photos</li>
+<li>2 private photos visible to friends</li>
+<li>3 private photos visible to family</li>
+<li>4 private photos visible to friends & family</li>
+<li>5 completely private photos</li>
+</ul>
+</dd>
+				<dt><b ><code>bbox</code></b> (Optional)</dt>
+		<dd>A comma-delimited list of 4 values defining the Bounding Box of the area that will be searched.
+<br /><br />
+The 4 values represent the bottom-left corner of the box and the top-right corner, minimum_longitude, minimum_latitude, maximum_longitude, maximum_latitude.
+<br /><br />
+Longitude has a range of -180 to 180 , latitude of -90 to 90. Defaults to -180, -90, 180, 90 if not specified.
+<br /><br />
+Unlike standard photo queries, geo (or bounding box) queries will only return 250 results per page.
+<br /><br />
+Geo queries require some sort of limiting agent in order to prevent the database from crying. This is basically like the check against "parameterless searches" for queries without a geo component.
+<br /><br />
+A tag, for instance, is considered a limiting agent as are user defined min_date_taken and min_date_upload parameters &#8212; If no limiting factor is passed we return only photos added in the last 12 hours (though we may extend the limit in the future).</dd>
+				<dt><b ><code>accuracy</code></b> (Optional)</dt>
+		<dd>Recorded accuracy level of the location information.  Current range is 1-16 :
+
+<ul>
+<li>World level is 1</li>
+<li>Country is ~3</li>
+<li>Region is ~6</li>
+<li>City is ~11</li>
+<li>Street is ~16</li>
+</ul>
+
+Defaults to maximum value if not specified.</dd>
+				<dt><b ><code>safe_search</code></b> (Optional)</dt>
+		<dd>Safe search setting:
+
+<ul>
+<li>1 for safe.</li>
+<li>2 for moderate.</li>
+<li>3 for restricted.</li>
+</ul>
+
+(Please note: Un-authed calls can only see Safe content.)</dd>
+				<dt><b ><code>content_types</code></b> (Optional)</dt>
+		<dd>Comma-separated list of content types to return. If used in conjunction with video_content_types, this is applied to only photos. If video_content_types is not specified, this filter will apply to all media types
+<ul>
+<li>0 for photos.</li>
+<li>1 for screenshots.</li>
+<li>2 for 'other'.</li>
+<li>3 for virtual photos.</li>
+</ul></dd>
+				<dt><b ><code>video_content_types</code></b> (Optional)</dt>
+		<dd>Comma-separated list of video content types to return. If specified without content_types, ensure that the media argument is not set to 'photos' or no results will be returned
+<ul>
+<li>0 for videos.</li>
+<li>1 for Screencasts.</li>
+<li>2 for Animation/CGI.</li>
+<li>3 for Machinima.</li>
+</ul></dd>
+				<dt><b ><code>machine_tags</code></b> (Optional)</dt>
+		<dd>Aside from passing in a fully formed machine tag, there is a special syntax for searching on specific properties :
+
+<ul>
+  <li>Find photos using the 'dc' namespace :    <code>"machine_tags" => "dc:"</code></li>
+
+  <li> Find photos with a title in the 'dc' namespace : <code>"machine_tags" => "dc:title="</code></li>
+
+  <li>Find photos titled "mr. camera" in the 'dc' namespace : <code>"machine_tags" => "dc:title=\"mr. camera\"</code></li>
+
+  <li>Find photos whose value is "mr. camera" : <code>"machine_tags" => "*:*=\"mr. camera\""</code></li>
+
+  <li>Find photos that have a title, in any namespace : <code>"machine_tags" => "*:title="</code></li>
+
+  <li>Find photos that have a title, in any namespace, whose value is "mr. camera" : <code>"machine_tags" => "*:title=\"mr. camera\""</code></li>
+
+  <li>Find photos, in the 'dc' namespace whose value is "mr. camera" : <code>"machine_tags" => "dc:*=\"mr. camera\""</code></li>
+
+ </ul>
+
+Multiple machine tags may be queried by passing a comma-separated list. The number of machine tags you can pass in a single query depends on the tag mode (AND or OR) that you are querying with. "AND" queries are limited to (16) machine tags. "OR" queries are limited
+to (8).</dd>
+				<dt><b ><code>machine_tag_mode</code></b> (Optional)</dt>
+		<dd>Either 'any' for an OR combination of tags, or 'all' for an AND combination. Defaults to 'any' if not specified.</dd>
+				<dt><b ><code>group_id</code></b> (Optional)</dt>
+		<dd>The id of a group who's pool to search.  If specified, only matching photos posted to the group's pool will be returned.</dd>
+							<dt><b ><code>contacts</code></b> (Optional)</dt>
+		<dd>Search your contacts. Either 'all' or 'ff' for just friends and family.</dd>
+				<dt><b ><code>woe_id</code></b> (Optional)</dt>
+		<dd>A 32-bit identifier that uniquely represents spatial entities. (not used if bbox argument is present).
+<br /><br />
+Geo queries require some sort of limiting agent in order to prevent the database from crying. This is basically like the check against "parameterless searches" for queries without a geo component.
+<br /><br />
+A tag, for instance, is considered a limiting agent as are user defined min_date_taken and min_date_upload parameters &mdash; If no limiting factor is passed we return only photos added in the last 12 hours (though we may extend the limit in the future).</dd>
+				<dt><b ><code>place_id</code></b> (Optional)</dt>
+		<dd>A Flickr place id.  (not used if bbox argument is present).
+<br /><br />
+Geo queries require some sort of limiting agent in order to prevent the database from crying. This is basically like the check against "parameterless searches" for queries without a geo component.
+<br /><br />
+A tag, for instance, is considered a limiting agent as are user defined min_date_taken and min_date_upload parameters &mdash; If no limiting factor is passed we return only photos added in the last 12 hours (though we may extend the limit in the future).</dd>
+				<dt><b ><code>media</code></b> (Optional)</dt>
+		<dd>Filter results by media type. Possible values are <code>all</code> (default), <code>photos</code> or <code>videos</code></dd>
+				<dt><b ><code>has_geo</code></b> (Optional)</dt>
+		<dd>Any photo that has been geotagged, or if the value is "0" any photo that has <i>not</i> been geotagged.
+<br /><br />
+Geo queries require some sort of limiting agent in order to prevent the database from crying. This is basically like the check against "parameterless searches" for queries without a geo component.
+<br /><br />
+A tag, for instance, is considered a limiting agent as are user defined min_date_taken and min_date_upload parameters &mdash; If no limiting factor is passed we return only photos added in the last 12 hours (though we may extend the limit in the future).</dd>
+				<dt><b ><code>geo_context</code></b> (Optional)</dt>
+		<dd>Geo context is a numeric value representing the photo's geotagginess beyond latitude and longitude. For example, you may wish to search for photos that were taken "indoors" or "outdoors". <br /><br />
+The current list of context IDs is :<br /><br/>
+<ul>
+<li><strong>0</strong>, not defined.</li>
+<li><strong>1</strong>, indoors.</li>
+<li><strong>2</strong>, outdoors.</li>
+</ul>
+<br /><br />
+Geo queries require some sort of limiting agent in order to prevent the database from crying. This is basically like the check against "parameterless searches" for queries without a geo component.
+<br /><br />
+A tag, for instance, is considered a limiting agent as are user defined min_date_taken and min_date_upload parameters &mdash; If no limiting factor is passed we return only photos added in the last 12 hours (though we may extend the limit in the future).</dd>
+				<dt><b ><code>lat</code></b> (Optional)</dt>
+		<dd>A valid latitude, in decimal format, for doing radial geo queries.
+<br /><br />
+Geo queries require some sort of limiting agent in order to prevent the database from crying. This is basically like the check against "parameterless searches" for queries without a geo component.
+<br /><br />
+A tag, for instance, is considered a limiting agent as are user defined min_date_taken and min_date_upload parameters &mdash; If no limiting factor is passed we return only photos added in the last 12 hours (though we may extend the limit in the future).</dd>
+				<dt><b ><code>lon</code></b> (Optional)</dt>
+		<dd>A valid longitude, in decimal format, for doing radial geo queries.
+<br /><br />
+Geo queries require some sort of limiting agent in order to prevent the database from crying. This is basically like the check against "parameterless searches" for queries without a geo component.
+<br /><br />
+A tag, for instance, is considered a limiting agent as are user defined min_date_taken and min_date_upload parameters &mdash; If no limiting factor is passed we return only photos added in the last 12 hours (though we may extend the limit in the future).</dd>
+				<dt><b ><code>radius</code></b> (Optional)</dt>
+		<dd>A valid radius used for geo queries, greater than zero and less than 20 miles (or 32 kilometers), for use with point-based geo queries. The default value is 5 (km).</dd>
+				<dt><b ><code>radius_units</code></b> (Optional)</dt>
+		<dd>The unit of measure when doing radial geo queries. Valid options are "mi" (miles) and "km" (kilometers). The default is "km".</dd>
+				<dt><b ><code>is_commons</code></b> (Optional)</dt>
+		<dd>Limit the scope of the search to only photos that are part of the <a href="http://flickr.com/commons">Flickr Commons project</a>. Default is false.</dd>
+				<dt><b ><code>in_gallery</code></b> (Optional)</dt>
+		<dd>Limit the scope of the search to only photos that are in a <a href="http://www.flickr.com/help/galleries/">gallery</a>?  Default is false, search all photos.</dd>
+					<dt><b ><code>is_getty</code></b> (Optional)</dt>
+		<dd>Limit the scope of the search to only photos that are for sale on Getty. Default is false.</dd>
+																													<dt><b ><code>content_type</code></b> (Optional)</dt>
+		<dd>DEPRECATED. Use content_types instead.
+
+Content Type setting:
+<ul>
+<li>1 for photos only.</li>
+<li>2 for screenshots only.</li>
+<li>3 for 'other' only.</li>
+<li>4 for photos and screenshots.</li>
+<li>5 for screenshots and 'other'.</li>
+<li>6 for photos and 'other'.</li>
+<li>7 for photos, screenshots, and 'other' (all).</li>
+</ul></dd>
+							<dt><b ><code>extras</code></b> (Optional)</dt>
+		<dd>A comma-delimited list of extra information to fetch for each returned record. Currently supported fields are: <code>description</code>, <code>license</code>, <code>date_upload</code>, <code>date_taken</code>, <code>owner_name</code>, <code>icon_server</code>, <code>original_format</code>, <code>last_update</code>, <code>geo</code>, <code>tags</code>, <code>machine_tags</code>, <code>o_dims</code>, <code>views</code>, <code>media</code>, <code>path_alias</code>, <code>url_sq</code>, <code>url_t</code>, <code>url_s</code>, <code>url_q</code>, <code>url_m</code>, <code>url_n</code>, <code>url_z</code>, <code>url_c</code>, <code>url_l</code>, <code>url_o</code></dd>
+				<dt><b ><code>per_page</code></b> (Optional)</dt>
+		<dd>Number of photos to return per page. If this argument is omitted, it defaults to 100. The maximum allowed value is 500.</dd>
+				<dt><b ><code>page</code></b> (Optional)</dt>
+		<dd>The page of results to return. If this argument is omitted, it defaults to 1.</dd>
+		</dl>

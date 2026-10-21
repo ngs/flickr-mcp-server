@@ -34,6 +34,7 @@ func main() {
 	log.SetOutput(os.Stderr)
 	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
 	log.SetPrefix("flickr-mcp-server: ")
+	flickr.UserAgent = "flickr-mcp-server/" + server.VERSION + " (+https://github.com/ngs/flickr-mcp-server)"
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

@@ -38,10 +38,25 @@ type Client struct {
 	signer signer
 }
 
+// UserAgent names this program on every request. Flickr's image servers
+// answer Go's default User-Agent with HTTP 502. main sets the version.
+var UserAgent = "flickr-mcp-server/dev"
+
+// userAgentTransport sets UserAgent on requests that do not have one.
+type userAgentTransport struct{ base http.RoundTripper }
+
+func (t userAgentTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	if r.Header.Get("User-Agent") == "" {
+		r = r.Clone(r.Context())
+		r.Header.Set("User-Agent", UserAgent)
+	}
+	return t.base.RoundTrip(r)
+}
+
 // NewClient returns a client for the real endpoints.
 func NewClient(creds Credentials, token *Token) *Client {
 	return &Client{
-		HTTP:            &http.Client{Timeout: 60 * time.Second},
+		HTTP:            &http.Client{Timeout: 60 * time.Second, Transport: userAgentTransport{base: http.DefaultTransport}},
 		Creds:           creds,
 		Token:           token,
 		RESTURL:         DefaultRESTURL,

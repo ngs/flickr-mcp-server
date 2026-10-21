@@ -18,6 +18,9 @@ import (
 const (
 	EnvAPIKey    = "FLICKR_API_KEY"
 	EnvAPISecret = "FLICKR_API_SECRET"
+	// EnvCredentialsFile points at a credentials file somewhere other than
+	// the configuration directory.
+	EnvCredentialsFile = "FLICKR_MCP_CREDENTIALS"
 )
 
 const (
@@ -64,7 +67,11 @@ var ErrLoosePermissions = errors.New("file is readable by other users; run chmod
 // error; a file with loose permissions is, so a leaked secret is noticed.
 func LoadCredentials(dir string) (Credentials, error) {
 	var c Credentials
-	values, err := readEnvFile(filepath.Join(dir, credentialsFile))
+	path := filepath.Join(dir, credentialsFile)
+	if p := os.Getenv(EnvCredentialsFile); p != "" {
+		path = p
+	}
+	values, err := readEnvFile(path)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return c, err
 	}
@@ -83,6 +90,51 @@ func LoadCredentials(dir string) (Credentials, error) {
 func SaveCredentials(dir string, c Credentials) error {
 	body := fmt.Sprintf("%s=%s\n%s=%s\n", EnvAPIKey, c.APIKey, EnvAPISecret, c.APISecret)
 	return writeSecret(dir, credentialsFile, []byte(body))
+}
+
+// Pending is the request token of an authorization started with
+// "auth --start" and finished with "auth --finish".
+type Pending struct {
+	Token       string `json:"oauth_token"`
+	TokenSecret string `json:"oauth_token_secret"`
+	Perms       Perms  `json:"perms"`
+}
+
+const pendingFile = "pending"
+
+// SavePending writes the pending request token with mode 0600.
+func SavePending(dir string, p Pending) error {
+	data, err := json.Marshal(p)
+	if err != nil {
+		return err
+	}
+	return writeSecret(dir, pendingFile, append(data, '\n'))
+}
+
+// LoadPending reads and removes the pending request token.
+func LoadPending(dir string) (Pending, error) {
+	var p Pending
+	path := filepath.Join(dir, pendingFile)
+	if err := checkPrivate(path); err != nil {
+		return p, err
+	}
+	data, err := os.ReadFile(path) // #nosec G304 -- our own config file
+	if err != nil {
+		return p, err
+	}
+	if err := json.Unmarshal(data, &p); err != nil {
+		return p, err
+	}
+	return p, nil
+}
+
+// RemovePending deletes the pending request token.
+func RemovePending(dir string) error {
+	err := os.Remove(filepath.Join(dir, pendingFile))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	return err
 }
 
 // LoadToken reads token.json in dir. It returns fs.ErrNotExist (wrapped) when

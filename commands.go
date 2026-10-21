@@ -153,6 +153,8 @@ func (c *cli) auth(ctx context.Context, args []string) error {
 	fs.SetOutput(c.errOut)
 	permsFlag := fs.String("perms", "read", "permission to request: read, write or delete")
 	open := fs.Bool("open", false, "open the authorization page in a browser")
+	start := fs.Bool("start", false, "only print the authorization URL and keep the request token for --finish")
+	finish := fs.String("finish", "", "exchange this code (from the authorization page) for the access token")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -165,9 +167,32 @@ func (c *cli) auth(ctx context.Context, args []string) error {
 		return err
 	}
 	client := c.newClient(creds, nil)
+	if *finish != "" {
+		pending, err := flickr.LoadPending(c.configDir)
+		if err != nil {
+			return fmt.Errorf("no authorization in progress (run auth --start first): %w", err)
+		}
+		token, err := client.AccessToken(ctx, pending.Token, pending.TokenSecret, *finish, pending.Perms)
+		if err != nil {
+			return err
+		}
+		if err := flickr.SaveToken(c.configDir, token); err != nil {
+			return err
+		}
+		_ = flickr.RemovePending(c.configDir)
+		c.printf("Authorized as %s with %s permission. Saved to %s/token.json (mode 0600).\n", token.Username, token.Perms, c.configDir)
+		return nil
+	}
 	reqToken, reqSecret, authURL, err := client.RequestToken(ctx, perms)
 	if err != nil {
 		return err
+	}
+	if *start {
+		if err := flickr.SavePending(c.configDir, flickr.Pending{Token: reqToken, TokenSecret: reqSecret, Perms: perms}); err != nil {
+			return err
+		}
+		c.printf("Open this page, allow access, then run: flickr-mcp-server auth --finish <code>\n\n  %s\n", authURL)
+		return nil
 	}
 	c.printf("Open this page, allow access, and paste the code Flickr shows:\n\n  %s\n\n", authURL)
 	if *open {

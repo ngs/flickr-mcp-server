@@ -139,3 +139,28 @@ func TestSavingTightensAnExistingLooseDirectory(t *testing.T) {
 		t.Fatalf("dir mode = %v, want 0700", info.Mode().Perm())
 	}
 }
+
+func TestCredentialsFileCanLiveElsewhere(t *testing.T) {
+	t.Setenv(EnvAPIKey, "")
+	t.Setenv(EnvAPISecret, "")
+	other := filepath.Join(t.TempDir(), "flickr.config.txt")
+	if err := os.WriteFile(other, []byte("FLICKR_API_KEY=elsewhere\nFLICKR_API_SECRET=s\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(EnvCredentialsFile, other)
+	c, err := LoadCredentials(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.APIKey != "elsewhere" {
+		t.Fatalf("got %+v", c)
+	}
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(other, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := LoadCredentials(t.TempDir()); !errors.Is(err, ErrLoosePermissions) {
+			t.Fatalf("a loose file elsewhere must be refused too: %v", err)
+		}
+	}
+}

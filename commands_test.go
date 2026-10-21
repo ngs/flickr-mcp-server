@@ -20,6 +20,7 @@ func testCLI(t *testing.T, input string, srv *httptest.Server) (*cli, *bytes.Buf
 	t.Helper()
 	t.Setenv(flickr.EnvAPIKey, "")
 	t.Setenv(flickr.EnvAPISecret, "")
+	t.Setenv(flickr.EnvCredentialsFile, "")
 	var out bytes.Buffer
 	c := &cli{
 		in:        bufio.NewReader(strings.NewReader(input)),
@@ -180,5 +181,56 @@ func TestAuthStopsOnCancellationAtTheCodePrompt(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(c.configDir, "token.json")); !os.IsNotExist(err) {
 		t.Fatal("auth must not save a token after cancellation")
+	}
+}
+
+// auth --start only prints the URL and keeps the request token; auth
+// --finish exchanges a code later, from another process.
+func TestTwoStepAuth(t *testing.T) {
+	srv := flickrStub(t)
+	c, out := testCLI(t, "", srv)
+	if err := flickr.SaveCredentials(c.configDir, flickr.Credentials{APIKey: "k", APISecret: "s"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.auth(context.Background(), []string{"--perms", "delete", "--start"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "oauth_token=req&perms=delete") || strings.Contains(out.String(), "reqsecret") {
+		t.Fatalf("start output = %q", out.String())
+	}
+	pendingPath := filepath.Join(c.configDir, "pending")
+	if info, err := os.Stat(pendingPath); err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("pending: %v %v", info, err)
+	}
+	if _, err := os.Stat(filepath.Join(c.configDir, "token.json")); !os.IsNotExist(err) {
+		t.Fatal("start must not save a token")
+	}
+
+	out.Reset()
+	if err := c.auth(context.Background(), []string{"--finish", "123-456"}); err != nil {
+		t.Fatal(err)
+	}
+	token, err := flickr.LoadToken(c.configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if token.Token != "acc" || token.Perms != flickr.PermsDelete {
+		t.Fatalf("token = %+v (the permission comes from --start)", token)
+	}
+	if _, err := os.Stat(pendingPath); !os.IsNotExist(err) {
+		t.Fatal("finish must remove the pending request token")
+	}
+	if strings.Contains(out.String(), "accsecret") {
+		t.Fatal("the token secret must not be printed")
+	}
+}
+
+func TestFinishWithoutStartFails(t *testing.T) {
+	c, _ := testCLI(t, "", flickrStub(t))
+	if err := flickr.SaveCredentials(c.configDir, flickr.Credentials{APIKey: "k", APISecret: "s"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.auth(context.Background(), []string{"--finish", "1"}); err == nil || !strings.Contains(err.Error(), "--start") {
+		t.Fatalf("err = %v", err)
 	}
 }

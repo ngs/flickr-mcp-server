@@ -151,7 +151,7 @@ func (c *Client) do(ctx context.Context, method, rawURL string, params url.Value
 		// API key, the token, the signature and the verifier.
 		var uerr *url.Error
 		if errors.As(err, &uerr) {
-			return nil, fmt.Errorf("%s %s: %w", method, normalizeURL(rawURL), uerr.Err)
+			err = uerr.Err
 		}
 		return nil, fmt.Errorf("%s %s: %w", method, normalizeURL(rawURL), err)
 	}

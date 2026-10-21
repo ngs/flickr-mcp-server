@@ -314,7 +314,7 @@ func TestBrowserCommand(t *testing.T) {
 }
 
 func TestNewCLIOutsideATerminal(t *testing.T) {
-	c := newCLI(t.TempDir())
+	c := newCLI(t.TempDir(), os.Stdin, io.Discard)
 	if c.docs == nil || c.docsBaseURL == "" || c.newClient == nil || c.openURL == nil {
 		t.Fatal("newCLI must wire its defaults")
 	}

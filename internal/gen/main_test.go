@@ -21,7 +21,7 @@ func TestRunWritesTheMethodTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := filepath.Join(dir, "zz_generated.go")
-	if err := run(in, out); err != nil {
+	if err := run([]string{"-in", in, "-out", out}); err != nil {
 		t.Fatal(err)
 	}
 	b, err := os.ReadFile(out)
@@ -46,14 +46,17 @@ func TestRunWritesTheMethodTable(t *testing.T) {
 
 func TestRunReportsErrors(t *testing.T) {
 	dir := t.TempDir()
-	if err := run(filepath.Join(dir, "missing.json"), filepath.Join(dir, "out.go")); err == nil {
+	if err := run([]string{"-in", filepath.Join(dir, "missing.json"), "-out", filepath.Join(dir, "out.go")}); err == nil {
 		t.Error("a missing snapshot must fail")
 	}
 	in := filepath.Join(dir, "m.json")
 	if err := (&snapshot.Snapshot{Source: "docs"}).Write(in); err != nil {
 		t.Fatal(err)
 	}
-	if err := run(in, filepath.Join(dir, "no", "dir", "out.go")); err == nil {
+	if err := run([]string{"-in", in, "-out", filepath.Join(dir, "no", "dir", "out.go")}); err == nil {
 		t.Error("an unwritable output must fail")
+	}
+	if err := run([]string{"-bogus"}); err == nil {
+		t.Error("an unknown flag must fail")
 	}
 }

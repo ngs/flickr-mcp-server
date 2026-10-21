@@ -16,16 +16,19 @@ import (
 )
 
 func main() {
-	in := flag.String("in", "../api/methods.json", "snapshot to read")
-	out := flag.String("out", "zz_generated.go", "Go file to write")
-	flag.Parse()
-	if err := run(*in, *out); err != nil {
+	if err := run(os.Args[1:]); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run(in, out string) error {
-	s, err := snapshot.Read(in)
+func run(args []string) error {
+	fs := flag.NewFlagSet("gen", flag.ContinueOnError)
+	in := fs.String("in", "../api/methods.json", "snapshot to read")
+	out := fs.String("out", "zz_generated.go", "Go file to write")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	s, err := snapshot.Read(*in)
 	if err != nil {
 		return err
 	}
@@ -33,7 +36,7 @@ func run(in, out string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(out, src, 0o600)
+	return os.WriteFile(*out, src, 0o600)
 }
 
 func render(s *snapshot.Snapshot) ([]byte, error) {

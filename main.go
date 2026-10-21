@@ -31,7 +31,11 @@ import (
 	"go.ngs.io/flickr-mcp-server/tools"
 )
 
-func main() {
+func main() { os.Exit(start(os.Args[1:])) }
+
+// start does the process-wide setup (logging to stderr, the User-Agent,
+// signals) and runs with the real stdin, stdout and stdio server.
+func start(args []string) int {
 	log.SetOutput(os.Stderr)
 	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
 	log.SetPrefix("flickr-mcp-server: ")
@@ -39,7 +43,7 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	os.Exit(run(ctx, stop, os.Args[1:], os.Stdout, server.Run))
+	return run(ctx, stop, args, os.Stdout, server.Run)
 }
 
 // run is main without the process-wide setup, so tests can drive it. stdout
@@ -55,7 +59,7 @@ func run(ctx context.Context, stop func(), args []string, stdout io.Writer, serv
 				log.Print(err)
 				return 1
 			}
-			if err := cmd(ctx, newCLI(configDir), args[1:]); err != nil {
+			if err := cmd(ctx, newCLI(configDir, os.Stdin, os.Stderr), args[1:]); err != nil {
 				log.Printf("%s: %v", args[0], err)
 				return 1
 			}

@@ -77,25 +77,20 @@ func (c *Client) sendFile(ctx context.Context, endpoint, path string, fields url
 	}
 	defer func() { _ = file.Close() }()
 
+	// The multipart writer writes to a bytes.Buffer, which never fails, so
+	// only reading the file can.
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
 	for k, vs := range params {
 		for _, v := range vs {
-			if err := w.WriteField(k, v); err != nil {
-				return UploadResult{}, err
-			}
+			_ = w.WriteField(k, v)
 		}
 	}
-	part, err := w.CreateFormFile("photo", filepath.Base(path))
-	if err != nil {
-		return UploadResult{}, err
-	}
+	part, _ := w.CreateFormFile("photo", filepath.Base(path))
 	if _, err := io.Copy(part, file); err != nil {
 		return UploadResult{}, err
 	}
-	if err := w.Close(); err != nil {
-		return UploadResult{}, err
-	}
+	_ = w.Close()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, &body)
 	if err != nil {

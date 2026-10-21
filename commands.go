@@ -42,17 +42,19 @@ type cli struct {
 	docsBaseURL string
 }
 
-func newCLI(configDir string) *cli {
+// newCLI reads from stdin and writes to errOut. When stdin is a terminal,
+// secrets are read without echo.
+func newCLI(configDir string, stdin *os.File, errOut io.Writer) *cli {
 	c := &cli{
-		in:          bufio.NewReader(os.Stdin),
-		errOut:      os.Stderr,
+		in:          bufio.NewReader(stdin),
+		errOut:      errOut,
 		configDir:   configDir,
 		newClient:   flickr.NewClient,
 		openURL:     openBrowser,
 		docs:        snapshot.HTTPFetcher(&http.Client{Timeout: 30 * time.Second}),
 		docsBaseURL: snapshot.DocsBaseURL,
 	}
-	fd := int(os.Stdin.Fd()) // #nosec G115 -- a file descriptor fits in int
+	fd := int(stdin.Fd()) // #nosec G115 -- a file descriptor fits in int
 	if term.IsTerminal(fd) {
 		c.readSecret = func() (string, error) {
 			b, err := term.ReadPassword(fd)

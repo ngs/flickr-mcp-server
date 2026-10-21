@@ -127,7 +127,7 @@ func RegisterFiles(srv *mcp.Server, c FileClient, opts FileOptions) int {
 				err = closeErr
 			}
 			if err != nil {
-				_ = removeFile(target)
+				_ = os.Remove(target)
 				return errorResult(err), nil
 			}
 			return jsonResult(map[string]any{"path": target, "size": chosen.Label, "bytes": written, "source": chosen.Source}, nil)
@@ -156,5 +156,3 @@ func jsonResult(v any, err error) (*mcp.CallToolResult, error) {
 	}
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(data)}}}, nil
 }
-
-var removeFile = func(path string) error { return os.Remove(path) }

@@ -103,29 +103,13 @@ type Pending struct {
 const pendingFile = "pending"
 
 // SavePending writes the pending request token with mode 0600.
-func SavePending(dir string, p Pending) error {
-	data, err := json.Marshal(p)
-	if err != nil {
-		return err
-	}
-	return writeSecret(dir, pendingFile, append(data, '\n'))
-}
+func SavePending(dir string, p Pending) error { return writeJSON(dir, pendingFile, p) }
 
-// LoadPending reads and removes the pending request token.
+// LoadPending reads the pending request token.
 func LoadPending(dir string) (Pending, error) {
 	var p Pending
-	path := filepath.Join(dir, pendingFile)
-	if err := checkPrivate(path); err != nil {
-		return p, err
-	}
-	data, err := os.ReadFile(path) // #nosec G304 -- our own config file
-	if err != nil {
-		return p, err
-	}
-	if err := json.Unmarshal(data, &p); err != nil {
-		return p, err
-	}
-	return p, nil
+	err := readJSON(filepath.Join(dir, pendingFile), &p)
+	return p, err
 }
 
 // RemovePending deletes the pending request token.
@@ -141,27 +125,35 @@ func RemovePending(dir string) error {
 // the user has not authorized yet.
 func LoadToken(dir string) (Token, error) {
 	var t Token
-	path := filepath.Join(dir, tokenFile)
-	if err := checkPrivate(path); err != nil {
-		return t, err
-	}
-	data, err := os.ReadFile(path) // #nosec G304 -- the path is our own config file
-	if err != nil {
-		return t, err
-	}
-	if err := json.Unmarshal(data, &t); err != nil {
-		return t, fmt.Errorf("reading %s: %w", path, err)
-	}
-	return t, nil
+	err := readJSON(filepath.Join(dir, tokenFile), &t)
+	return t, err
 }
 
 // SaveToken writes token.json in dir with mode 0600.
-func SaveToken(dir string, t Token) error {
-	data, err := json.MarshalIndent(t, "", "  ")
+func SaveToken(dir string, t Token) error { return writeJSON(dir, tokenFile, t) }
+
+// readJSON reads a private JSON file into v.
+func readJSON(path string, v any) error {
+	if err := checkPrivate(path); err != nil {
+		return err
+	}
+	data, err := os.ReadFile(path) // #nosec G304 -- our own config file
 	if err != nil {
 		return err
 	}
-	return writeSecret(dir, tokenFile, append(data, '\n'))
+	if err := json.Unmarshal(data, v); err != nil {
+		return fmt.Errorf("reading %s: %w", path, err)
+	}
+	return nil
+}
+
+// writeJSON writes v as indented JSON to a private file.
+func writeJSON(dir, name string, v any) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeSecret(dir, name, append(data, '\n'))
 }
 
 func readEnvFile(path string) (map[string]string, error) {
@@ -218,22 +210,18 @@ func writeSecret(dir, name string, data []byte) error {
 			return err
 		}
 	}
+	// Write a new file next to the old one and rename it over, so a reader
+	// never sees half a file. Removing a leftover first makes WriteFile create
+	// the file, with mode 0600, rather than reuse one with another mode.
 	path := filepath.Join(dir, name)
-	tmp, err := os.CreateTemp(dir, name+".*")
-	if err != nil {
+	tmp := path + ".tmp"
+	_ = os.Remove(tmp)
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}
-	defer func() { _ = os.Remove(tmp.Name()) }()
-	if err := tmp.Chmod(0o600); err != nil {
-		_ = tmp.Close()
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
 		return err
 	}
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), path)
+	return nil
 }

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -22,6 +23,9 @@ type fakeFiles struct {
 	fields   url.Values
 	replaced string
 	content  string
+	source   string
+	fetches  int
+	fetchErr error
 }
 
 func (f *fakeFiles) Upload(_ context.Context, path string, fields url.Values) (flickr.UploadResult, error) {
@@ -34,9 +38,18 @@ func (f *fakeFiles) Replace(_ context.Context, path, photoID string, fields url.
 	return flickr.UploadResult{PhotoID: photoID}, nil
 }
 
-func (f *fakeFiles) Download(_ context.Context, _, label string, w io.Writer) (flickr.Size, int64, error) {
-	n, err := io.WriteString(w, f.content)
-	return flickr.Size{Label: label}, int64(n), err
+func (f *fakeFiles) PickSize(_ context.Context, photoID, label string) (flickr.Size, error) {
+	source := f.source
+	if source == "" {
+		source = "https://live.staticflickr.com/65535/" + photoID + "_abc123_b.jpg"
+	}
+	return flickr.Size{Label: label, Source: source}, nil
+}
+
+func (f *fakeFiles) Fetch(_ context.Context, _ string, w io.Writer) (int64, error) {
+	f.fetches++
+	n, _ := io.WriteString(w, f.content)
+	return int64(n), f.fetchErr
 }
 
 func fileSession(t *testing.T, c FileClient, opts FileOptions) (*mcp.ClientSession, int) {
@@ -74,8 +87,8 @@ func TestFileToolsNeedTheirDirectoriesAndPermission(t *testing.T) {
 		{FileOptions{UploadDir: &d, MaxPerms: flickr.PermsRead, Authorized: true}, 0},
 		{FileOptions{UploadDir: &d, MaxPerms: flickr.PermsWrite}, 0},
 		{FileOptions{UploadDir: &d, MaxPerms: flickr.PermsWrite, Authorized: true}, 2},
-		{FileOptions{DownloadDir: &d}, 1},
-		{FileOptions{UploadDir: &d, DownloadDir: &d, MaxPerms: flickr.PermsWrite, Authorized: true}, 3},
+		{FileOptions{DownloadDir: &d}, 3},
+		{FileOptions{UploadDir: &d, DownloadDir: &d, MaxPerms: flickr.PermsWrite, Authorized: true}, 5},
 	}
 	for i, c := range cases {
 		if _, n := fileSession(t, &fakeFiles{}, c.opts); n != c.want {
@@ -151,13 +164,6 @@ func TestDownloadWritesInsideTheDirectory(t *testing.T) {
 	}
 }
 
-type failingDownload struct{ fakeFiles }
-
-func (*failingDownload) Download(_ context.Context, _, _ string, w io.Writer) (flickr.Size, int64, error) {
-	_, _ = io.WriteString(w, "PART")
-	return flickr.Size{}, 4, errors.New("connection reset")
-}
-
 func TestFileToolArgumentErrors(t *testing.T) {
 	d := openDir(t)
 	if err := os.WriteFile(filepath.Join(d.Root(), "a.jpg"), []byte("x"), 0o600); err != nil {
@@ -180,18 +186,160 @@ func TestFileToolArgumentErrors(t *testing.T) {
 
 func TestAFailedDownloadLeavesNoFile(t *testing.T) {
 	d := openDir(t)
-	cs, _ := fileSession(t, &failingDownload{}, FileOptions{DownloadDir: &d})
-	text, isErr := call(t, cs, "flickr_download", map[string]any{"photo_id": "1", "path": "x.jpg"})
-	if !isErr || !strings.Contains(text, "connection reset") {
-		t.Fatalf("result = %s", text)
+	cs, _ := fileSession(t, &fakeFiles{content: "PART", fetchErr: errors.New("connection reset")}, FileOptions{DownloadDir: &d})
+	for _, args := range []map[string]any{{"photo_id": "1", "path": "x.jpg"}, {"photo_id": "1"}} {
+		text, isErr := call(t, cs, "flickr_download", args)
+		if !isErr || !strings.Contains(text, "connection reset") {
+			t.Fatalf("result = %s", text)
+		}
 	}
-	if _, err := os.Stat(filepath.Join(d.Root(), "x.jpg")); !os.IsNotExist(err) {
-		t.Fatal("a half-written file must be removed")
+	for _, name := range []string{"x.jpg", "1_abc123_large.jpg"} {
+		if _, err := os.Stat(filepath.Join(d.Root(), name)); !os.IsNotExist(err) {
+			t.Fatalf("a half-written %s must be removed", name)
+		}
 	}
 }
 
 func TestUploadErrorsReachTheClient(t *testing.T) {
 	if res, _ := jsonResult(nil, errors.New("quota exceeded")); !res.IsError {
 		t.Fatal("an error must become a tool error")
+	}
+}
+
+func result(t *testing.T, text string) map[string]any {
+	t.Helper()
+	var m map[string]any
+	if err := json.Unmarshal([]byte(text), &m); err != nil {
+		t.Fatalf("not JSON: %s", text)
+	}
+	return m
+}
+
+// Without a path, a download is named <id>_<secret>_<size>.<ext> in the
+// download directory and served from there next time.
+func TestDownloadUsesTheCache(t *testing.T) {
+	d := openDir(t)
+	fake := &fakeFiles{content: "IMAGE"}
+	cs, _ := fileSession(t, fake, FileOptions{DownloadDir: &d, CacheWarnBytes: 1 << 30})
+
+	text, isErr := call(t, cs, "flickr_download", map[string]any{"photo_id": "55"})
+	if isErr {
+		t.Fatalf("download: %s", text)
+	}
+	first := result(t, text)
+	want := filepath.Join(d.Root(), "55_abc123_large.jpg")
+	if first["path"] != want || first["cached"] != false || fake.fetches != 1 {
+		t.Fatalf("first = %v, fetches = %d", first, fake.fetches)
+	}
+	usage := first["cache"].(map[string]any)
+	if usage["bytes"] != float64(5) || usage["files"] != float64(1) || usage["human"] != "5 B" {
+		t.Fatalf("cache usage = %v", usage)
+	}
+	if _, warned := first["warning"]; warned {
+		t.Fatal("no warning below the limit")
+	}
+
+	second := result(t, mustCall(t, cs, "flickr_download", map[string]any{"photo_id": "55"}))
+	if second["path"] != want || second["cached"] != true || fake.fetches != 1 {
+		t.Fatalf("second = %v, fetches = %d", second, fake.fetches)
+	}
+
+	// A new secret (the photo was replaced or its privacy changed) is a new file.
+	fake.source = "https://live.staticflickr.com/65535/55_def456_b.jpg"
+	third := result(t, mustCall(t, cs, "flickr_download", map[string]any{"photo_id": "55"}))
+	if third["cached"] != false || fake.fetches != 2 || third["path"] != filepath.Join(d.Root(), "55_def456_large.jpg") {
+		t.Fatalf("third = %v", third)
+	}
+}
+
+func mustCall(t *testing.T, cs *mcp.ClientSession, name string, args map[string]any) string {
+	t.Helper()
+	text, isErr := call(t, cs, name, args)
+	if isErr {
+		t.Fatalf("%s: %s", name, text)
+	}
+	return text
+}
+
+func TestDownloadWarnsWhenTheCacheIsLarge(t *testing.T) {
+	d := openDir(t)
+	fake := &fakeFiles{content: "IMAGE"}
+	cs, _ := fileSession(t, fake, FileOptions{DownloadDir: &d, CacheWarnBytes: 8})
+	mustCall(t, cs, "flickr_download", map[string]any{"photo_id": "1"})
+	res := result(t, mustCall(t, cs, "flickr_download", map[string]any{"photo_id": "2"}))
+	warning, _ := res["warning"].(string)
+	if !strings.Contains(warning, "consider removing old images") {
+		t.Fatalf("warning = %q", warning)
+	}
+	candidates := res["oldest"].([]any)
+	if len(candidates) == 0 || candidates[0].(map[string]any)["name"] != "1_abc123_large.jpg" {
+		t.Fatalf("candidates = %v", candidates)
+	}
+}
+
+func TestDownloadRefusesNonImageSources(t *testing.T) {
+	d := openDir(t)
+	cs, _ := fileSession(t, &fakeFiles{source: "https://www.flickr.com/photos/x/1/play/site/abc/"}, FileOptions{DownloadDir: &d})
+	if text, isErr := call(t, cs, "flickr_download", map[string]any{"photo_id": "1", "size": "Site MP4"}); !isErr {
+		t.Fatalf("a video page is not an image to cache: %s", text)
+	}
+}
+
+func cacheFile(t *testing.T, d localfs.Dir, name string, size int, age time.Duration) {
+	t.Helper()
+	p := filepath.Join(d.Root(), name)
+	if err := os.WriteFile(p, make([]byte, size), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	when := time.Now().Add(-age)
+	if err := os.Chtimes(p, when, when); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCacheStatusAndPurge(t *testing.T) {
+	d := openDir(t)
+	cacheFile(t, d, "1_aa_large.jpg", 100, time.Hour)
+	cacheFile(t, d, "2_bb_large.jpg", 200, 72*time.Hour)
+	cacheFile(t, d, "3_cc_small.jpg", 50, 24*time.Hour)
+	cacheFile(t, d, "keep-me.jpg", 999, 1000*time.Hour) // not a cache file
+	cs, _ := fileSession(t, &fakeFiles{}, FileOptions{DownloadDir: &d})
+
+	status := result(t, mustCall(t, cs, "flickr_cache_status", map[string]any{"limit": 2}))
+	if status["bytes"] != float64(350) || status["files"] != float64(3) {
+		t.Fatalf("status = %v", status)
+	}
+	if entries := status["oldest"].([]any); len(entries) != 2 || entries[0].(map[string]any)["name"] != "2_bb_large.jpg" {
+		t.Fatalf("oldest = %v", entries)
+	}
+
+	// Dry run by default: the plan, nothing removed.
+	plan := result(t, mustCall(t, cs, "flickr_cache_purge", map[string]any{"target_bytes": 150}))
+	if plan["dry_run"] != true || plan["bytes"] != float64(250) || len(plan["files"].([]any)) != 2 {
+		t.Fatalf("plan = %v", plan)
+	}
+	if _, err := os.Stat(filepath.Join(d.Root(), "2_bb_large.jpg")); err != nil {
+		t.Fatal("a dry run must not remove anything")
+	}
+
+	done := result(t, mustCall(t, cs, "flickr_cache_purge", map[string]any{"older_than_days": 2, "dry_run": false}))
+	if done["dry_run"] != false || done["bytes"] != float64(200) {
+		t.Fatalf("purge = %v", done)
+	}
+	if _, err := os.Stat(filepath.Join(d.Root(), "2_bb_large.jpg")); !os.IsNotExist(err) {
+		t.Fatal("the old file must be gone")
+	}
+	if _, err := os.Stat(filepath.Join(d.Root(), "keep-me.jpg")); err != nil {
+		t.Fatal("files outside the naming convention are never touched")
+	}
+	after := done["cache"].(map[string]any)
+	if after["bytes"] != float64(150) || after["files"] != float64(2) {
+		t.Fatalf("after = %v", after)
+	}
+
+	for _, args := range []map[string]any{{}, {"target_bytes": 1, "older_than_days": 1}, {"target_bytes": -1}, {"older_than_days": "x"}} {
+		if _, isErr := call(t, cs, "flickr_cache_purge", args); !isErr {
+			t.Errorf("purge %v must fail: exactly one non-negative criterion", args)
+		}
 	}
 }

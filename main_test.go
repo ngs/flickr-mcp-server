@@ -104,7 +104,7 @@ func TestRunWithFileDirectoriesAndNamespaces(t *testing.T) {
 	if code := run(context.Background(), func() {}, args, &bytes.Buffer{}, countTools(&n)); code != 0 {
 		t.Fatalf("exit %d", code)
 	}
-	want := len(tools.Selected(tools.Options{MaxPerms: flickr.PermsWrite, Authorized: true, Namespaces: []string{"photosets"}})) + 3
+	want := len(tools.Selected(tools.Options{MaxPerms: flickr.PermsWrite, Authorized: true, Namespaces: []string{"photosets"}})) + 5
 	if n != want {
 		t.Fatalf("%d tools, want %d", n, want)
 	}

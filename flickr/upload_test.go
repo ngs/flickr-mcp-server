@@ -150,3 +150,27 @@ func TestDownloadPicksTheSizeByLabel(t *testing.T) {
 		t.Fatalf("a missing size must list the available ones: %v", err)
 	}
 }
+
+func TestPickSizeAndFetch(t *testing.T) {
+	var srvURL string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/l.jpg" {
+			_, _ = io.WriteString(w, "LARGE")
+			return
+		}
+		_, _ = io.WriteString(w, `{"stat":"ok","sizes":{"size":[{"label":"Large","source":"`+srvURL+`/l.jpg"}]}}`)
+	}))
+	t.Cleanup(srv.Close)
+	srvURL = srv.URL
+	c := NewClient(Credentials{APIKey: "k", APISecret: "s"}, nil)
+	c.RESTURL = srv.URL + "/rest"
+	size, err := c.PickSize(context.Background(), "1", "LARGE")
+	if err != nil || size.Source != srv.URL+"/l.jpg" {
+		t.Fatalf("size = %+v, %v", size, err)
+	}
+	var buf bytes.Buffer
+	n, err := c.Fetch(context.Background(), size.Source, &buf)
+	if err != nil || n != 5 || buf.String() != "LARGE" {
+		t.Fatalf("fetched %d %q, %v", n, buf.String(), err)
+	}
+}

@@ -86,4 +86,11 @@ func TestE2EReadOnly(t *testing.T) {
 	if !strings.HasPrefix(saved["path"].(string), downloads) || saved["bytes"].(float64) <= 0 {
 		t.Fatalf("download = %v", saved)
 	}
+	first := call("flickr_download", map[string]any{"photo_id": photoID, "size": "Small"})
+	again := call("flickr_download", map[string]any{"photo_id": photoID, "size": "Small"})
+	if first["cached"] != false || again["cached"] != true || first["path"] != again["path"] {
+		t.Fatalf("cache: first = %v, again = %v", first, again)
+	}
+	t.Logf("cached as %s", filepath.Base(again["path"].(string)))
+	call("flickr_cache_status", nil)
 }

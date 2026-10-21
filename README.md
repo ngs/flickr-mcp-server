@@ -141,9 +141,38 @@ a directory for them:
 | Flag | Tools |
 |---|---|
 | `--upload-dir DIR` | `flickr_upload` (new photo or video) and `flickr_replace` (new file for an existing photo). They read only regular files inside `DIR`, after following symlinks, and need a token with `write` permission and `--max-perms write` or higher. |
-| `--download-dir DIR` | `flickr_download` saves a photo at one of the sizes `flickr.photos.getSizes` lists (`Large` by default). It writes only inside `DIR`, never through a symlink, and keeps existing files unless `overwrite` is set. |
+| `--download-dir DIR` | `flickr_download`, `flickr_cache_status` and `flickr_cache_purge` (see below). They write only inside `DIR`, never through a symlink. |
+| `--cache-warn-bytes N` | Image cache size above which downloads suggest removing old images (default 5 GiB). |
 
 Paths given to these tools are relative to the directory.
+
+### The image cache
+
+`flickr_download` saves a photo at one of the sizes `flickr.photos.getSizes`
+lists (`Large` by default). Without `path`, the file goes directly into the
+download directory as `<photo id>_<secret>_<size>.<ext>`, for example
+`55576444578_1d148ca9ac_large-2048.jpg`, and works as a cache:
+
+- If that file is already there, the tool returns it without fetching
+  anything (`"cached": true`) and marks it as just used.
+- The secret comes from the image URL. It changes when the photo is replaced,
+  so a replaced photo gets a new file instead of the stale one.
+- Only image files are cached. API responses (lists, EXIF and so on) are not.
+- Every download reports the cache usage (`bytes`, `human`, `files`). Above
+  `--cache-warn-bytes` it adds a `warning` and the `oldest` files as removal
+  candidates.
+
+Nothing is removed automatically. `flickr_cache_status` lists the usage and the
+least recently used files; `flickr_cache_purge` removes them, either down to
+`target_bytes` or those not used for `older_than_days`. It only lists what it
+would remove unless `dry_run` is `false`, and it only ever touches files named
+like the cache, so your own files in the directory are safe. Both come with
+`--download-dir` alone: they work on local files only, so they do not depend
+on `--max-perms`.
+
+With `path`, `flickr_download` saves exactly there instead (relative to the
+directory), outside the cache, and keeps an existing file unless `overwrite`
+is set.
 
 ## The method list
 
